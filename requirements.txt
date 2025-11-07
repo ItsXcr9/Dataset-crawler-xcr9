@@ -15,7 +15,7 @@ datasets==2.15.0
 transformers==4.35.2
 sentencepiece==0.1.99
 tokenizers==0.15.0
-gcld3==3.0.13
+langdetect==1.0.9
 
 # Deduplication and quality filtering
 datasketch==1.6.4

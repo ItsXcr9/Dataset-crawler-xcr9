@@ -17,7 +17,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 
 # NLP imports
-import gcld3
+from langdetect import detect, detect_langs
 from datasketch import MinHash, MinHashLSH
 import textstat
 from transformers import pipeline
@@ -116,9 +116,9 @@ class DataProcessor:
 
     def init_language_detector(self):
         """Initialize language detection models"""
-        # Use gcld3 for reliable language detection (no compilation issues)
-        logger.info("Using gcld3 for language detection")
-        return gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
+        # Use langdetect for reliable language detection (pure Python, no compilation)
+        logger.info("Using langdetect for language detection")
+        return True
 
     def init_quality_model(self):
         """Initialize quality assessment model"""
@@ -276,11 +276,13 @@ class DataProcessor:
     def detect_language(self, text: str) -> Tuple[str, float]:
         """Detect language of text"""
         try:
-            # Use gcld3 for reliable language detection
+            # Use langdetect for reliable language detection
             if self.lang_detector:
-                result = self.lang_detector.FindLanguage(text=text[:1000])
-                if result and result.language and result.probability > 0:
-                    return result.language, result.probability
+                # detect_langs returns list of languages with probabilities
+                results = detect_langs(text[:1000])
+                if results and len(results) > 0:
+                    # Get the most probable language
+                    return results[0].lang, results[0].prob
             return 'unknown', 0.0
         except Exception as e:
             logger.warning("Language detection failed", error=str(e))
