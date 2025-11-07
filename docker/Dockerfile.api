@@ -7,14 +7,15 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     libffi-dev \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Install pybind11 system-wide for fasttext compilation
+RUN pip install --no-cache-dir --break-system-packages pybind11
 
 # Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-
-# Install pybind11 for fasttext
-RUN pip install --no-cache-dir pybind11
 
 # Copy requirements and install
 COPY requirements.txt .
