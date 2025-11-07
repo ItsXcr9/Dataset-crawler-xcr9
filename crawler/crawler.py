@@ -35,8 +35,7 @@ class ProfessionalCrawler(CrawlSpider):
 
     def __init__(self, start_urls=None, allowed_domains=None, max_depth=3,
                  output_dir='dataset/raw', *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+        # Set attributes BEFORE calling super().__init__()
         self.start_urls = start_urls or []
         self.allowed_domains = allowed_domains or []
         self.max_depth = int(max_depth)
@@ -59,7 +58,7 @@ class ProfessionalCrawler(CrawlSpider):
             unique=True
         )
 
-        # Set up rules for crawling
+        # Set up rules for crawling BEFORE calling super().__init__()
         self.rules = (
             Rule(
                 self.link_extractor,
@@ -68,9 +67,16 @@ class ProfessionalCrawler(CrawlSpider):
                 process_request='process_request'
             ),
         )
+        
+        # Now initialize the parent CrawlSpider
+        super().__init__(*args, **kwargs)
 
         logger.info("Crawler initialized", start_urls=self.start_urls,
                    allowed_domains=self.allowed_domains, max_depth=self.max_depth)
+
+    def parse_start_url(self, response):
+        """Parse the start URL (required for CrawlSpider with rules)"""
+        return self.parse_item(response)
 
     def process_request(self, request, response):
         """Process request before sending"""
@@ -99,8 +105,13 @@ class ProfessionalCrawler(CrawlSpider):
             text_content = self.extract_text_content(response)
             links = self.extract_links(response)
 
+            logger.info("Processing page", url=url, title=title[:50] if title else "No title", 
+                       content_length=len(text_content) if text_content else 0,
+                       links_found=len(links))
+
             if not text_content or len(text_content.strip()) < 100:
-                logger.debug("Skipping page with insufficient content", url=url)
+                logger.info("Skipping page with insufficient content", url=url, 
+                           content_length=len(text_content) if text_content else 0)
                 return
 
             # Create document record
@@ -153,11 +164,7 @@ class ProfessionalCrawler(CrawlSpider):
 
     def extract_text_content(self, response) -> str:
         """Extract clean text content from page"""
-        # Remove script and style elements
-        response = response.clone()
-        response.css('script, style, nav, header, footer, aside').remove()
-
-        # Extract text from main content areas
+        # Extract text from main content areas, excluding unwanted elements
         selectors = [
             'main',
             'article',
@@ -169,7 +176,8 @@ class ProfessionalCrawler(CrawlSpider):
 
         text_parts = []
         for selector in selectors:
-            elements = response.css(f'{selector} *::text').getall()
+            # Get all text excluding script, style, nav, header, footer, aside
+            elements = response.css(f'{selector} *:not(script):not(style):not(nav):not(header):not(footer):not(aside)::text').getall()
             if elements:
                 text = ' '.join(elements).strip()
                 # Clean up whitespace
@@ -250,9 +258,9 @@ def run_crawler(start_url: str, max_depth: int = 3, output_dir: str = 'dataset/r
         'AUTOTHROTTLE_ENABLED': True,
         'AUTOTHROTTLE_START_DELAY': 1,
         'AUTOTHROTTLE_MAX_DELAY': 10,
-        'HTTPCACHE_ENABLED': True,
+        'HTTPCACHE_ENABLED': False,  # Disable cache for testing
         'HTTPCACHE_EXPIRATION_SECS': 3600,
-        'LOG_LEVEL': 'INFO',
+        'LOG_LEVEL': 'DEBUG',  # Enable debug logging
     })
 
     # Add crawler to process

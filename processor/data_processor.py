@@ -30,7 +30,7 @@ logger = structlog.get_logger()
 
 # Metrics
 DOCS_PROCESSED = Counter('processor_docs_total', 'Total documents processed')
-DOCS_FILTERED = Counter('processor_docs_filtered', 'Documents filtered out')
+DOCS_FILTERED = Counter('processor_docs_filtered', 'Documents filtered out', ['reason'])
 QUALITY_SCORES = Histogram('processor_quality_scores', 'Quality scores distribution')
 PROCESSING_TIME = Histogram('processor_batch_seconds', 'Time spent processing batches')
 
