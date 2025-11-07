@@ -104,6 +104,7 @@ class DatasetManager:
                 repo = Repo.init(str(self.dataset_root))
                 # Create .gitignore
                 gitignore = self.dataset_root / ".gitignore"
+                gitignore.parent.mkdir(parents=True, exist_ok=True)
                 with open(gitignore, 'w') as f:
                     f.write("""# Dataset artifacts
 *.parquet

@@ -8,9 +8,10 @@ import json
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 from pathlib import Path
+import time
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
+from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -21,6 +22,7 @@ import structlog
 from pydantic import BaseModel
 
 from dataset_manager import DatasetManager
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 logger = structlog.get_logger()
 
@@ -54,6 +56,31 @@ def get_db_connection():
 
 # Redis connection
 redis_client = redis.Redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379"))
+
+REQUEST_COUNTER = Counter(
+    'dataset_api_requests_total',
+    'Total API requests handled by the API',
+    ['method', 'endpoint', 'status_code']
+)
+REQUEST_LATENCY = Histogram(
+    'dataset_api_request_latency_seconds',
+    'Latency of API requests in seconds',
+    ['endpoint']
+)
+
+@app.middleware("http")
+async def record_request_metrics(request: Request, call_next):
+    start_time = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        endpoint = request.url.path
+        elapsed = time.perf_counter() - start_time
+        REQUEST_COUNTER.labels(request.method, endpoint, str(status_code)).inc()
+        REQUEST_LATENCY.labels(endpoint).observe(elapsed)
 
 # Pydantic models
 class CrawlRequest(BaseModel):
@@ -252,18 +279,10 @@ async def create_dataset_version(description: str, background_tasks: BackgroundT
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/metrics")
-async def get_metrics():
-    """Get system metrics"""
-    try:
-        # Get Prometheus metrics
-        import requests
-        response = requests.get("http://prometheus:9090/api/v1/query?query=up")
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return {"status": "prometheus_unavailable"}
-    except:
-        return {"status": "metrics_unavailable"}
+async def metrics():
+    """Expose Prometheus metrics for this API"""
+    data = generate_latest()
+    return Response(content=data, media_type=CONTENT_TYPE_LATEST)
 
 # Background task functions
 def process_crawl_job(job_id: str, request: CrawlRequest):
