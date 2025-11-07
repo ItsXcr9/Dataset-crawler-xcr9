@@ -14,7 +14,8 @@ const queryClient = new QueryClient({
   },
 });
 
-const apiBaseUrl = window.__DATASET_API_BASE_URL__ || process.env.REACT_APP_API_URL || 'http://localhost:18000';
+// Use relative path to leverage nginx proxy, or allow override via window variable
+const apiBaseUrl = window.__DATASET_API_BASE_URL__ || process.env.REACT_APP_API_URL || '/api';
 
 const rootElement = document.getElementById('root');
 

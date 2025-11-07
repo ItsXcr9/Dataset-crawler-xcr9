@@ -29,6 +29,46 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Job tracking functions (for web interface)
+API_URL="${API_URL:-http://localhost:18000}"
+
+create_job() {
+    local job_type=$1
+    local params=$2
+    local response=$(curl -s -X POST "${API_URL}/${job_type}" \
+        -H "Content-Type: application/json" \
+        -d "$params" 2>/dev/null || echo '{"job_id":"unknown"}')
+    echo "$response" | grep -o '"job_id":"[^"]*"' | cut -d'"' -f4 || echo ""
+}
+
+update_job_status() {
+    local job_id=$1
+    local status=$2
+    local progress=$3
+    local message=$4
+    
+    # Update via processor container (has Python and redis)
+    docker-compose exec -T processor python3 -c "
+import json
+import os
+import redis
+import sys
+from datetime import datetime
+
+redis_url = os.getenv('REDIS_URL', 'redis://redis:6379')
+r = redis.Redis.from_url(redis_url, decode_responses=True)
+job_key = f'job:{sys.argv[1]}'
+job_data = r.get(job_key)
+if job_data:
+    job = json.loads(job_data)
+    job['status'] = sys.argv[2]
+    job['progress'] = float(sys.argv[3])
+    job['message'] = sys.argv[4]
+    job['updated_at'] = datetime.utcnow().isoformat()
+    r.set(job_key, json.dumps(job))
+" "$job_id" "$status" "$progress" "$message" 2>/dev/null || true
+}
+
 # Check if URL is provided
 if [ -z "$1" ]; then
     print_error "Usage: ./crawl_full_site.sh <start_url> [max_depth] [version_name]"
@@ -126,9 +166,33 @@ print_info "  - Rate limit requests"
 print_info "  - Extract only text content"
 echo ""
 
-docker-compose exec -T crawler python -m crawler.crawler "$START_URL" "$MAX_DEPTH" dataset/raw
+# Create crawl job for tracking in web interface
+CRAWL_JOB_PARAMS=$(cat <<EOF
+{
+  "start_url": "$START_URL",
+  "max_depth": $MAX_DEPTH,
+  "allowed_domains": ["$DOMAIN"]
+}
+EOF
+)
+CRAWL_JOB_ID=$(create_job "crawl" "$CRAWL_JOB_PARAMS")
+if [ -n "$CRAWL_JOB_ID" ] && [ "$CRAWL_JOB_ID" != "unknown" ]; then
+    print_info "Crawl job created: $CRAWL_JOB_ID (visible in web interface)"
+    update_job_status "$CRAWL_JOB_ID" "running" "0.1" "Starting crawl of $DOMAIN"
+fi
 
-if [ $? -ne 0 ]; then
+docker-compose exec -T crawler python -m crawler.crawler "$START_URL" "$MAX_DEPTH" dataset/raw
+CRAWL_EXIT_CODE=$?
+
+if [ -n "$CRAWL_JOB_ID" ] && [ "$CRAWL_JOB_ID" != "unknown" ]; then
+    if [ $CRAWL_EXIT_CODE -eq 0 ]; then
+        update_job_status "$CRAWL_JOB_ID" "completed" "1.0" "Crawl completed successfully"
+    else
+        update_job_status "$CRAWL_JOB_ID" "failed" "0.0" "Crawl failed"
+    fi
+fi
+
+if [ $CRAWL_EXIT_CODE -ne 0 ]; then
     print_error "Crawling failed!"
     exit 1
 fi
@@ -153,9 +217,32 @@ echo ""
 CRAWL_START_TIME=$(cat dataset/.crawl_start_time 2>/dev/null || echo "0")
 print_info "Processing only files created after: $(date -d @$CRAWL_START_TIME 2>/dev/null || echo 'this crawl')"
 
-docker-compose exec -T processor python -m processor.data_processor
+# Create process job for tracking
+PROCESS_JOB_PARAMS=$(cat <<EOF
+{
+  "raw_dir": "dataset/raw",
+  "output_dir": "dataset"
+}
+EOF
+)
+PROCESS_JOB_ID=$(create_job "process" "$PROCESS_JOB_PARAMS")
+if [ -n "$PROCESS_JOB_ID" ] && [ "$PROCESS_JOB_ID" != "unknown" ]; then
+    print_info "Process job created: $PROCESS_JOB_ID (visible in web interface)"
+    update_job_status "$PROCESS_JOB_ID" "running" "0.1" "Starting data processing"
+fi
 
-if [ $? -ne 0 ]; then
+docker-compose exec -T processor python -m processor.data_processor
+PROCESS_EXIT_CODE=$?
+
+if [ -n "$PROCESS_JOB_ID" ] && [ "$PROCESS_JOB_ID" != "unknown" ]; then
+    if [ $PROCESS_EXIT_CODE -eq 0 ]; then
+        update_job_status "$PROCESS_JOB_ID" "completed" "1.0" "Processing completed successfully"
+    else
+        update_job_status "$PROCESS_JOB_ID" "failed" "0.0" "Processing failed"
+    fi
+fi
+
+if [ $PROCESS_EXIT_CODE -ne 0 ]; then
     print_error "Processing failed!"
     exit 1
 fi
@@ -179,9 +266,35 @@ print_info "  - Shard size: 512 MB"
 print_info "  - Train/Val split: 95/5"
 echo ""
 
-docker-compose exec -T processor python -m processor.tokenizer_sharder
+# Create tokenize job for tracking
+TOKENIZE_JOB_PARAMS=$(cat <<EOF
+{
+  "cleaned_dir": "dataset/cleaned",
+  "shards_dir": "dataset/shards",
+  "model_name": "microsoft/DialoGPT-medium",
+  "max_length": 2048,
+  "val_split": 0.05
+}
+EOF
+)
+TOKENIZE_JOB_ID=$(create_job "tokenize" "$TOKENIZE_JOB_PARAMS")
+if [ -n "$TOKENIZE_JOB_ID" ] && [ "$TOKENIZE_JOB_ID" != "unknown" ]; then
+    print_info "Tokenize job created: $TOKENIZE_JOB_ID (visible in web interface)"
+    update_job_status "$TOKENIZE_JOB_ID" "running" "0.1" "Starting tokenization and sharding"
+fi
 
-if [ $? -ne 0 ]; then
+docker-compose exec -T processor python -m processor.tokenizer_sharder
+TOKENIZE_EXIT_CODE=$?
+
+if [ -n "$TOKENIZE_JOB_ID" ] && [ "$TOKENIZE_JOB_ID" != "unknown" ]; then
+    if [ $TOKENIZE_EXIT_CODE -eq 0 ]; then
+        update_job_status "$TOKENIZE_JOB_ID" "completed" "1.0" "Tokenization completed successfully"
+    else
+        update_job_status "$TOKENIZE_JOB_ID" "failed" "0.0" "Tokenization failed"
+    fi
+fi
+
+if [ $TOKENIZE_EXIT_CODE -ne 0 ]; then
     print_error "Tokenization failed!"
     exit 1
 fi

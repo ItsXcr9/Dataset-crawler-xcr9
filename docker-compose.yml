@@ -117,6 +117,9 @@ services:
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
+    volumes:
+      - ./dataset:/app/dataset:ro
+      - ./dataset_backups:/app/dataset_backups:ro
     ports:
       - "18000:8000"
     depends_on:

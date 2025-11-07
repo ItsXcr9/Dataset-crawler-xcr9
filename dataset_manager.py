@@ -51,14 +51,34 @@ class DatasetManager:
         self.registry_file = self.dataset_root / "registry.yaml"
         self.versions_dir = self.dataset_root / "versions"
 
-        # Create directories
-        self.versions_dir.mkdir(parents=True, exist_ok=True)
+        # Create directories (handle read-only filesystem gracefully)
+        try:
+            self.versions_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            # Read-only filesystem - skip directory creation
+            logger.warning("Cannot create versions directory (read-only filesystem)", 
+                         versions_dir=str(self.versions_dir))
 
-        # Initialize or load registry
-        self.registry = self.load_or_create_registry()
+        # Initialize or load registry (handle read-only gracefully)
+        try:
+            self.registry = self.load_or_create_registry()
+        except Exception as e:
+            # If we can't load/create registry, create a minimal one in memory
+            logger.warning("Could not load registry, using minimal registry", error=str(e))
+            self.registry = DatasetRegistry(
+                name="Web Crawl Dataset",
+                description="Professional web crawl dataset for LLM training",
+                versions=[],
+                current_version="",
+                created_at=datetime.utcnow().isoformat(),
+                last_updated=datetime.utcnow().isoformat()
+            )
 
-        # Initialize git repo for versioning
-        self.init_git_repo()
+        # Initialize git repo for versioning (skip if read-only)
+        try:
+            self.init_git_repo()
+        except Exception:
+            logger.warning("Could not initialize git repo (read-only filesystem)")
 
         logger.info("Dataset manager initialized", dataset_root=str(dataset_root))
 
@@ -361,33 +381,84 @@ Use the metadata files to understand the dataset composition and quality.
 
     def get_dataset_summary(self) -> Dict[str, Any]:
         """Get a summary of the current dataset"""
-        if not self.registry.current_version:
-            return {'status': 'empty'}
-
-        current_version = self.get_version_info()
-
-        # Load current statistics
-        stats_file = self.dataset_root / "metadata" / "dataset_stats.csv"
-        if stats_file.exists():
-            df = pd.read_csv(stats_file)
-            current_stats = {
-                'total_documents': len(df),
-                'total_tokens': df['token_estimate'].sum() if 'token_estimate' in df.columns else 0,
-                'languages': df['language'].value_counts().to_dict() if 'language' in df.columns else {},
-                'avg_quality': df['quality_score'].mean() if 'quality_score' in df.columns else 0
-            }
-        else:
-            current_stats = {}
-
+        # Read from actual manifest files (more reliable than registry)
+        train_manifest = self.dataset_root / "shards" / "train_manifest.json"
+        val_manifest = self.dataset_root / "shards" / "val_manifest.json"
+        version_file = self.dataset_root / "VERSION.txt"
+        
+        # Get version from VERSION.txt or registry
+        current_version = "N/A"
+        if version_file.exists():
+            try:
+                with open(version_file, 'r') as f:
+                    for line in f:
+                        if line.startswith("Dataset Version:"):
+                            current_version = line.split(":", 1)[1].strip()
+                            break
+            except Exception:
+                pass
+        
+        if not current_version or current_version == "N/A":
+            if self.registry.current_version:
+                current_version = self.registry.current_version
+            else:
+                # Try to get from backup directories
+                backup_dir = Path("dataset_backups")
+                if backup_dir.exists():
+                    versions = sorted([d.name for d in backup_dir.iterdir() if d.is_dir()], reverse=True)
+                    if versions:
+                        current_version = versions[0]
+        
+        # Load statistics from manifest files
+        total_documents = 0
+        total_tokens = 0
+        train_docs = 0
+        train_tokens = 0
+        val_docs = 0
+        val_tokens = 0
+        
+        if train_manifest.exists():
+            try:
+                with open(train_manifest, 'r') as f:
+                    train_data = json.load(f)
+                    train_docs = train_data.get('total_documents', 0)
+                    train_tokens = train_data.get('total_tokens', 0)
+            except Exception:
+                pass
+        
+        if val_manifest.exists():
+            try:
+                with open(val_manifest, 'r') as f:
+                    val_data = json.load(f)
+                    val_docs = val_data.get('total_documents', 0)
+                    val_tokens = val_data.get('total_tokens', 0)
+            except Exception:
+                pass
+        
+        total_documents = train_docs + val_docs
+        total_tokens = train_tokens + val_tokens
+        
+        # Count versions from backup directories
+        total_versions = len(self.registry.versions) if self.registry.versions else 0
+        backup_dir = Path("dataset_backups")
+        if backup_dir.exists():
+            backup_versions = len([d for d in backup_dir.iterdir() if d.is_dir()])
+            total_versions = max(total_versions, backup_versions)
+        
         return {
-            'name': self.registry.name,
-            'current_version': self.registry.current_version,
-            'total_versions': len(self.registry.versions),
-            'created_at': self.registry.created_at,
-            'last_updated': self.registry.last_updated,
-            'current_statistics': current_stats,
-            'quality_metrics': current_version.quality_metrics,
-            'description': current_version.description
+            'name': self.registry.name if self.registry.name else 'Web Crawl Dataset',
+            'current_version': current_version,
+            'total_versions': total_versions,
+            'created_at': self.registry.created_at if self.registry.created_at else datetime.utcnow().isoformat(),
+            'last_updated': self.registry.last_updated if self.registry.last_updated else datetime.utcnow().isoformat(),
+            'current_statistics': {
+                'total_documents': total_documents,
+                'total_tokens': total_tokens,
+                'train_documents': train_docs,
+                'train_tokens': train_tokens,
+                'val_documents': val_docs,
+                'val_tokens': val_tokens
+            }
         }
 
 

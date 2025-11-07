@@ -2,7 +2,8 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import './App.css';
 
-const DEFAULT_API_URL = process.env.REACT_APP_API_URL || 'http://localhost:18000';
+// Use relative path to leverage nginx proxy
+const DEFAULT_API_URL = process.env.REACT_APP_API_URL || '/api';
 
 const fetchJson = async (url, options) => {
   const response = await fetch(url, options);
