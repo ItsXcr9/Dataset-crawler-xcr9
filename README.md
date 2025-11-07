@@ -91,11 +91,18 @@ chmod +x crawl_full_site.sh
 6. ✅ Shows detailed statistics
 7. ✅ Saves version info for reproducibility
 
-**Domain Restriction:**
-- The crawler automatically extracts the domain from your start URL
-- **Example**: Starting from `https://kubernetes.io/docs/` will **only** crawl pages on `kubernetes.io`
+**Domain Restriction (Includes All Subdomains):**
+- The crawler automatically extracts the **root domain** from your start URL
+- **Example**: Starting from `https://kubernetes.io/docs/` will crawl:
+  - ✅ `kubernetes.io` (main domain)
+  - ✅ `docs.kubernetes.io` (subdomain)
+  - ✅ `blog.kubernetes.io` (subdomain)
+  - ✅ Any other `*.kubernetes.io` subdomain
 - It will **never** follow links to external domains like github.com, twitter.com, etc.
-- This is controlled by Scrapy's `allowed_domains` feature
+- **Subdomain Examples:**
+  - `https://docs.python.org/` → crawls all `*.python.org` subdomains
+  - `https://blog.example.com/` → crawls all `*.example.com` subdomains
+  - `https://kubernetes.io/docs/` → crawls all `*.kubernetes.io` subdomains
 
 **Depth Recommendations:**
 - **Depth 3-4**: Small sites, quick testing (~100-1000 pages)

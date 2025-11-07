@@ -246,7 +246,30 @@ def run_crawler(start_url: str, max_depth: int = 3, output_dir: str = 'dataset/r
 
     # Parse start URL to get domain
     parsed = urlparse(start_url)
-    allowed_domains = [parsed.netloc]
+    netloc = parsed.netloc
+    
+    # Extract root domain to allow all subdomains
+    # e.g., docs.kubernetes.io -> kubernetes.io
+    # e.g., blog.example.com -> example.com
+    domain_parts = netloc.split('.')
+    if len(domain_parts) >= 2:
+        # Get root domain (last 2 parts for most TLDs, or last 3 for .co.uk, .com.au, etc.)
+        # For most cases: domain.com, domain.co.uk, domain.com.au
+        if len(domain_parts) >= 3 and domain_parts[-2] in ['co', 'com', 'net', 'org', 'edu', 'gov']:
+            # Handle cases like example.co.uk, example.com.au
+            root_domain = '.'.join(domain_parts[-3:])
+        else:
+            # Standard case: example.com, example.org
+            root_domain = '.'.join(domain_parts[-2:])
+    else:
+        root_domain = netloc
+    
+    allowed_domains = [root_domain]
+    
+    logger.info("Domain configuration", 
+               original_netloc=netloc,
+               root_domain=root_domain,
+               allows_subdomains=True)
 
     # Initialize crawler process
     process = CrawlerProcess({
