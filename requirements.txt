@@ -19,7 +19,7 @@ gcld3==3.0.13
 
 # Deduplication and quality filtering
 datasketch==1.6.4
-simhash-py==1.0.6
+simhash==2.1.2
 textstat==0.7.3
 
 # Storage and databases
