@@ -145,6 +145,24 @@ class DataProcessor:
 
         # Find all raw data files
         raw_files = list(Path(raw_dir).glob("*.jsonl"))
+        
+        # Filter to only process files created during current crawl session
+        # Check for crawl start time marker
+        crawl_start_file = Path(raw_dir).parent / ".crawl_start_time"
+        if crawl_start_file.exists():
+            try:
+                crawl_start_time = float(crawl_start_file.read_text().strip())
+                # Only process files modified after crawl started (with 10 second buffer)
+                raw_files = [
+                    f for f in raw_files 
+                    if f.stat().st_mtime >= (crawl_start_time - 10)
+                ]
+                logger.info("Filtered to files from current crawl", 
+                           total_found=len(list(Path(raw_dir).glob("*.jsonl"))),
+                           current_crawl=len(raw_files))
+            except (ValueError, OSError) as e:
+                logger.warning("Could not filter by crawl time, processing all files", error=str(e))
+        
         logger.info("Found raw files", count=len(raw_files))
 
         all_processed_docs = []

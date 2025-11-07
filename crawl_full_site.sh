@@ -74,30 +74,44 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Create backup directory
-BACKUP_DIR="dataset_backups/${VERSION_NAME}"
-print_info "Creating backup directory: $BACKUP_DIR"
-mkdir -p "$BACKUP_DIR"
+# CRITICAL: Completely remove and recreate directories to ensure clean state
+print_info "Clearing all old files from previous crawls..."
+# Remove entire directories to ensure no leftover files
+rm -rf dataset/raw dataset/cleaned dataset/shards dataset/metadata 2>/dev/null || true
+rm -f dataset/VERSION.txt 2>/dev/null || true
 
-# Backup existing datasets if they exist
-if [ -d "dataset/raw" ] && [ "$(ls -A dataset/raw 2>/dev/null)" ]; then
-    print_info "Backing up existing raw data..."
-    mv dataset/raw "$BACKUP_DIR/raw"
-fi
-
-if [ -d "dataset/cleaned" ] && [ "$(ls -A dataset/cleaned 2>/dev/null)" ]; then
-    print_info "Backing up existing cleaned data..."
-    mv dataset/cleaned "$BACKUP_DIR/cleaned"
-fi
-
-if [ -d "dataset/shards" ] && [ "$(ls -A dataset/shards 2>/dev/null)" ]; then
-    print_info "Backing up existing shards..."
-    mv dataset/shards "$BACKUP_DIR/shards"
-fi
-
-# Create fresh directories
+# Create completely fresh directories
 print_info "Creating fresh dataset directories..."
 mkdir -p dataset/{raw,cleaned,shards/train,shards/val,metadata}
+
+# Record start time for this crawl (to verify only new files are processed)
+CRAWL_START_TIME=$(date +%s)
+echo "$CRAWL_START_TIME" > dataset/.crawl_start_time
+
+# Create backup directory (will be populated AFTER crawl completes)
+BACKUP_DIR="dataset_backups/${VERSION_NAME}"
+print_info "Backup directory will be: $BACKUP_DIR"
+mkdir -p "$BACKUP_DIR"
+
+# Fix permissions - containers run as non-root users (UID 1000)
+print_info "Setting permissions for Docker containers..."
+# Get the UID/GID from the containers (usually 1000:1000)
+CRAWLER_UID=$(docker-compose exec -T crawler id -u 2>/dev/null || echo "1000")
+CRAWLER_GID=$(docker-compose exec -T crawler id -g 2>/dev/null || echo "1000")
+
+# Set ownership to container user (usually 1000:1000)
+if [ -n "$CRAWLER_UID" ] && [ -n "$CRAWLER_GID" ]; then
+    chown -R ${CRAWLER_UID}:${CRAWLER_GID} dataset/ 2>/dev/null || {
+        # If chown fails, make directories world-writable as fallback
+        print_warning "Could not change ownership, making directories writable..."
+        chmod -R 777 dataset/ 2>/dev/null || true
+    }
+    # Ensure directories are writable (775 = owner and group can write)
+    chmod -R 775 dataset/ 2>/dev/null || true
+else
+    # Fallback: make writable by all
+    chmod -R 777 dataset/ 2>/dev/null || true
+fi
 
 # Start crawling
 print_info ""
@@ -135,12 +149,19 @@ print_info "  - Quality score: > 0.6"
 print_info "  - Deduplication: Exact + Fuzzy"
 echo ""
 
+# Process only files created during this crawl (newer than start time)
+CRAWL_START_TIME=$(cat dataset/.crawl_start_time 2>/dev/null || echo "0")
+print_info "Processing only files created after: $(date -d @$CRAWL_START_TIME 2>/dev/null || echo 'this crawl')"
+
 docker-compose exec -T processor python -m processor.data_processor
 
 if [ $? -ne 0 ]; then
     print_error "Processing failed!"
     exit 1
 fi
+
+# Verify we only processed files from this crawl
+print_info "Verifying processed files are from this crawl only..."
 
 # Count processed documents
 CLEANED_COUNT=$(find dataset/cleaned -name "*.jsonl" -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' || echo "0")
@@ -228,9 +249,35 @@ Validation Documents: ${VAL_DOCS:-0}
 Validation Tokens: ${VAL_TOKENS:-0}
 EOF
 
+# Backup the NEW dataset AFTER processing completes
+print_info ""
+print_info "Backing up completed dataset to: $BACKUP_DIR"
+mkdir -p "$BACKUP_DIR"
+
+# Copy only the NEW files that were just created
+if [ -d "dataset/raw" ] && [ "$(find dataset/raw -name '*.jsonl' -type f | wc -l)" -gt 0 ]; then
+    print_info "Backing up raw data..."
+    cp -r dataset/raw "$BACKUP_DIR/raw" 2>/dev/null || true
+fi
+
+if [ -d "dataset/cleaned" ] && [ "$(find dataset/cleaned -name '*.jsonl' -type f | wc -l)" -gt 0 ]; then
+    print_info "Backing up cleaned data..."
+    cp -r dataset/cleaned "$BACKUP_DIR/cleaned" 2>/dev/null || true
+fi
+
+if [ -d "dataset/shards" ] && [ "$(find dataset/shards -type f | wc -l)" -gt 0 ]; then
+    print_info "Backing up shards..."
+    cp -r dataset/shards "$BACKUP_DIR/shards" 2>/dev/null || true
+fi
+
+if [ -f "dataset/VERSION.txt" ]; then
+    cp dataset/VERSION.txt "$BACKUP_DIR/VERSION.txt" 2>/dev/null || true
+fi
+
 print_info ""
 print_info "Version info saved to: dataset/VERSION.txt"
-print_info "Backup saved to: $BACKUP_DIR"
+print_info "Backup completed at: $BACKUP_DIR"
+print_info "  (Contains ONLY data from this crawl: $DOMAIN)"
 
 echo ""
 
