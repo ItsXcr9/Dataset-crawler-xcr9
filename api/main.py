@@ -10,8 +10,8 @@ from datetime import datetime
 from pathlib import Path
 import time
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
-from fastapi.responses import JSONResponse, FileResponse, Response
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -128,7 +128,7 @@ async def health_check():
         raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
 
 @app.post("/crawl", response_model=Dict[str, Any])
-async def start_crawl(request: CrawlRequest, background_tasks: BackgroundTasks):
+async def start_crawl(request: CrawlRequest):
     """Start a web crawling job"""
     job_id = f"crawl_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
 
@@ -147,9 +147,8 @@ async def start_crawl(request: CrawlRequest, background_tasks: BackgroundTasks):
     redis_client.set(f"job:{job_id}", json.dumps(job_data))
 
     # Add to job queue
-    redis_client.lpush("crawl_queue", job_id)
+    redis_client.rpush("crawl_queue", job_id)
 
-    background_tasks.add_task(process_crawl_job, job_id, request)
 
     return {
         "job_id": job_id,
@@ -158,7 +157,7 @@ async def start_crawl(request: CrawlRequest, background_tasks: BackgroundTasks):
     }
 
 @app.post("/process", response_model=Dict[str, Any])
-async def start_processing(request: ProcessRequest, background_tasks: BackgroundTasks):
+async def start_processing(request: ProcessRequest):
     """Start data processing job"""
     job_id = f"process_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
 
@@ -174,9 +173,8 @@ async def start_processing(request: ProcessRequest, background_tasks: Background
     }
 
     redis_client.set(f"job:{job_id}", json.dumps(job_data))
-    redis_client.lpush("process_queue", job_id)
+    redis_client.rpush("process_queue", job_id)
 
-    background_tasks.add_task(process_processing_job, job_id, request)
 
     return {
         "job_id": job_id,
@@ -185,7 +183,7 @@ async def start_processing(request: ProcessRequest, background_tasks: Background
     }
 
 @app.post("/tokenize", response_model=Dict[str, Any])
-async def start_tokenization(request: TokenizeRequest, background_tasks: BackgroundTasks):
+async def start_tokenization(request: TokenizeRequest):
     """Start tokenization and sharding job"""
     job_id = f"tokenize_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
 
@@ -201,9 +199,8 @@ async def start_tokenization(request: TokenizeRequest, background_tasks: Backgro
     }
 
     redis_client.set(f"job:{job_id}", json.dumps(job_data))
-    redis_client.lpush("tokenize_queue", job_id)
+    redis_client.rpush("tokenize_queue", job_id)
 
-    background_tasks.add_task(process_tokenization_job, job_id, request)
 
     return {
         "job_id": job_id,
@@ -264,7 +261,7 @@ async def get_version_info(version: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/dataset/version")
-async def create_dataset_version(description: str, background_tasks: BackgroundTasks):
+async def create_dataset_version(description: str):
     """Create a new dataset version"""
     try:
         # Mock statistics (would be calculated from actual data)
@@ -283,79 +280,6 @@ async def metrics():
     """Expose Prometheus metrics for this API"""
     data = generate_latest()
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)
-
-# Background task functions
-def process_crawl_job(job_id: str, request: CrawlRequest):
-    """Process crawl job in background"""
-    try:
-        update_job_status(job_id, "running", 0.1, "Starting crawler...")
-
-        # Import crawler here to avoid circular imports
-        from crawler.crawler import run_crawler
-
-        # Run crawler
-        update_job_status(job_id, "running", 0.5, "Crawling in progress...")
-        run_crawler(request.start_url, request.max_depth)
-
-        update_job_status(job_id, "completed", 1.0, "Crawling completed successfully")
-
-    except Exception as e:
-        logger.error("Crawl job failed", job_id=job_id, error=str(e))
-        update_job_status(job_id, "failed", 0.0, f"Crawl failed: {str(e)}")
-
-def process_processing_job(job_id: str, request: ProcessRequest):
-    """Process data processing job in background"""
-    try:
-        update_job_status(job_id, "running", 0.1, "Starting data processing...")
-
-        from processor.data_processor import DataProcessor
-
-        processor = DataProcessor()
-        stats = processor.process_dataset(request.raw_dir, request.output_dir)
-
-        update_job_status(job_id, "completed", 1.0,
-                         f"Processing completed: {stats['processed_docs']} docs processed")
-
-    except Exception as e:
-        logger.error("Processing job failed", job_id=job_id, error=str(e))
-        update_job_status(job_id, "failed", 0.0, f"Processing failed: {str(e)}")
-
-def process_tokenization_job(job_id: str, request: TokenizeRequest):
-    """Process tokenization job in background"""
-    try:
-        update_job_status(job_id, "running", 0.1, "Starting tokenization...")
-
-        from processor.tokenizer_sharder import TokenizerSharder
-
-        sharder = TokenizerSharder(
-            model_name=request.model_name,
-            max_length=request.max_length
-        )
-        stats = sharder.process_dataset(
-            request.cleaned_dir,
-            request.shards_dir,
-            request.val_split
-        )
-
-        update_job_status(job_id, "completed", 1.0,
-                         f"Tokenization completed: {stats['train_shards']} train shards created")
-
-    except Exception as e:
-        logger.error("Tokenization job failed", job_id=job_id, error=str(e))
-        update_job_status(job_id, "failed", 0.0, f"Tokenization failed: {str(e)}")
-
-def update_job_status(job_id: str, status: str, progress: float, message: str):
-    """Update job status in Redis"""
-    job_data = redis_client.get(f"job:{job_id}")
-    if job_data:
-        job = json.loads(job_data)
-        job.update({
-            "status": status,
-            "progress": progress,
-            "message": message,
-            "updated_at": datetime.utcnow().isoformat()
-        })
-        redis_client.set(f"job:{job_id}", json.dumps(job))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
