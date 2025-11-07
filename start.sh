@@ -246,11 +246,11 @@ show_help() {
     echo "  $0 version 'Initial crawl of Kubernetes docs'"
     echo ""
     echo "Services:"
-    echo "  Web UI:     http://localhost:3000"
-    echo "  API:        http://localhost:8000"
-    echo "  MinIO:      http://localhost:9001"
-    echo "  Grafana:    http://localhost:3001"
-    echo "  Prometheus: http://localhost:9090"
+    echo "  Web UI:     http://localhost:13000"
+    echo "  API:        http://localhost:18000"
+    echo "  MinIO:      http://localhost:19001"
+    echo "  Grafana:    http://localhost:13001"
+    echo "  Prometheus: http://localhost:19090"
 }
 
 # Main script logic

@@ -12,7 +12,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "5432:5432"
+      - "15432:5432"
     networks:
       - crawler_network
     healthcheck:
@@ -25,7 +25,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "16379:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -39,8 +39,8 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "19000:9000"
+      - "19001:9001"
     volumes:
       - minio_data:/data
     networks:
@@ -120,7 +120,7 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
     ports:
-      - "8000:8000"
+      - "18000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -138,7 +138,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.webui
     ports:
-      - "3000:3000"
+      - "13000:3000"
     environment:
       - API_URL=http://api:8000
     depends_on:
@@ -151,7 +151,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     ports:
-      - "9090:9090"
+      - "19090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -169,7 +169,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     ports:
-      - "3001:3000"
+      - "13001:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
@@ -186,7 +186,7 @@ services:
   flower:
     image: mher/flower:latest
     ports:
-      - "5555:5555"
+      - "15555:5555"
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - FLOWER_BASIC_AUTH=user:password

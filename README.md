@@ -55,17 +55,17 @@ docker-compose up -d
 ```
 
 3. **Access the services**:
-- **Web UI**: http://localhost:3000
-- **API**: http://localhost:8000
-- **MinIO Console**: http://localhost:9001 (admin/admin)
-- **Grafana**: http://localhost:3001 (admin/admin)
-- **Prometheus**: http://localhost:9090
+- **Web UI**: http://localhost:13000
+- **API**: http://localhost:18000
+- **MinIO Console**: http://localhost:19001 (admin/admin)
+- **Grafana**: http://localhost:13001 (admin/admin)
+- **Prometheus**: http://localhost:19090
 
 ### Basic Usage
 
 #### Using the Web UI
 
-1. Open http://localhost:3000
+1. Open http://localhost:13000
 2. Click "Start New Crawl"
 3. Enter starting URL (e.g., `https://kubernetes.io/docs/home/`)
 4. Set crawl parameters:
@@ -79,7 +79,7 @@ docker-compose up -d
 
 ```bash
 # Start a crawl
-curl -X POST http://localhost:8000/crawl \
+curl -X POST http://localhost:18000/crawl \
   -H "Content-Type: application/json" \
   -d '{
     "start_url": "https://kubernetes.io/docs/home/",
@@ -87,10 +87,10 @@ curl -X POST http://localhost:8000/crawl \
   }'
 
 # Check job status
-curl http://localhost:8000/jobs/{job_id}
+curl http://localhost:18000/jobs/{job_id}
 
 # Process crawled data
-curl -X POST http://localhost:8000/process \
+curl -X POST http://localhost:18000/process \
   -H "Content-Type: application/json" \
   -d '{
     "raw_dir": "dataset/raw",
@@ -98,7 +98,7 @@ curl -X POST http://localhost:8000/process \
   }'
 
 # Create training shards
-curl -X POST http://localhost:8000/tokenize \
+curl -X POST http://localhost:18000/tokenize \
   -H "Content-Type: application/json" \
   -d '{
     "model_name": "microsoft/DialoGPT-medium",
@@ -180,7 +180,7 @@ language:
 
 ### Grafana Dashboards
 
-Access Grafana at http://localhost:3001 and import the provided dashboard:
+Access Grafana at http://localhost:13001 and import the provided dashboard:
 
 - **Crawler Performance**: Crawl rates, error rates, queue status
 - **Data Quality**: Language distribution, quality scores, filtering stats
