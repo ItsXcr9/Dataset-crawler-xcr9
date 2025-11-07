@@ -206,3 +206,101 @@
   font-style: italic;
 }
 
+.form-layout {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 720px) {
+  .form-layout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .form-actions {
+    justify-content: flex-end;
+  }
+}
+
+.form-actions {
+  display: flex;
+  justify-content: stretch;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.alert {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.alert-error {
+  background: #ffe3e3;
+  color: #b02a37;
+}
+
+.alert-success {
+  background: #d3f9d8;
+  color: #2b8a3e;
+}
+
+.alert-info {
+  background: #e7f5ff;
+  color: #1971c2;
+}
+
+.meta {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 1rem;
+}
+
+.status-pill {
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  background: #e9ecef;
+  color: #495057;
+}
+
+.status-pill.status-running {
+  background: #d0ebff;
+  color: #1971c2;
+}
+
+.status-pill.status-completed {
+  background: #d3f9d8;
+  color: #2b8a3e;
+}
+
+.status-pill.status-failed {
+  background: #ffe3e3;
+  color: #c92a2a;
+}
+
+.job-meta {
+  margin-top: 0.75rem;
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.8rem;
+  color: #868e96;
+}
+
+.empty-state.error {
+  color: #c92a2a;
+}
