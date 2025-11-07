@@ -17,7 +17,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 
 # NLP imports
-import fasttext
 import cld3
 from datasketch import MinHash, MinHashLSH
 import textstat
@@ -117,16 +116,9 @@ class DataProcessor:
 
     def init_language_detector(self):
         """Initialize language detection models"""
-        try:
-            # Try fastText first
-            model_path = "lid.176.bin"
-            if not os.path.exists(model_path):
-                logger.warning("FastText language model not found, using cld3 fallback")
-                return None
-            return fasttext.load_model(model_path)
-        except:
-            logger.info("Using cld3 for language detection")
-            return None
+        # Use cld3 for reliable language detection (no compilation issues)
+        logger.info("Using cld3 for language detection")
+        return True
 
     def init_quality_model(self):
         """Initialize quality assessment model"""
@@ -284,18 +276,11 @@ class DataProcessor:
     def detect_language(self, text: str) -> Tuple[str, float]:
         """Detect language of text"""
         try:
-            if self.lang_detector:
-                # Use fastText
-                predictions = self.lang_detector.predict(text.replace('\n', ' ')[:1000])
-                lang = predictions[0][0].replace('__label__', '')
-                confidence = float(predictions[1][0])
-                return lang, confidence
-            else:
-                # Use cld3
-                result = cld3.get_language(text[:1000])
-                if result:
-                    return result.language, result.probability
-                return 'unknown', 0.0
+            # Use cld3 for reliable language detection
+            result = cld3.get_language(text[:1000])
+            if result and result.language and result.probability > 0:
+                return result.language, result.probability
+            return 'unknown', 0.0
         except Exception as e:
             logger.warning("Language detection failed", error=str(e))
             return 'unknown', 0.0

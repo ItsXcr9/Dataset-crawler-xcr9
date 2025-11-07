@@ -15,7 +15,6 @@ datasets==2.15.0
 transformers==4.35.2
 sentencepiece==0.1.99
 tokenizers==0.15.0
-fasttext==0.9.2
 cld3==0.2.1
 
 # Deduplication and quality filtering

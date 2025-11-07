@@ -5,11 +5,7 @@ FROM python:3.11-slim as builder
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
-    python3-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Install pybind11 system-wide for fasttext compilation
-RUN pip install --no-cache-dir --break-system-packages pybind11
 
 # Create virtual environment
 RUN python -m venv /opt/venv
