@@ -12,10 +12,12 @@ pyarrow==14.0.1
 datasets==2.15.0
 
 # NLP and tokenization
-transformers==4.35.2
+transformers>=4.40.0
 sentencepiece==0.1.99
-tokenizers==0.15.0
+tokenizers>=0.19.0,<0.20
 langdetect==1.0.9
+torch>=2.0.0
+accelerate>=0.20.0
 
 # Deduplication and quality filtering
 datasketch==1.6.4

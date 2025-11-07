@@ -7,6 +7,7 @@ A comprehensive system for crawling websites and creating high-quality datasets 
 - **Professional Web Crawler**: Recursive crawling with respect for robots.txt, rate limiting, and distributed architecture
 - **Advanced Data Processing**: Deduplication, language detection, quality filtering, and content cleaning
 - **Tokenization & Sharding**: Convert cleaned data into training-ready shards using modern tokenizers
+- **Model Training**: Train popular LLMs (Llama, Qwen, Mistral, etc.) on your crawled dataset
 - **Dataset Versioning**: Git-based versioning system for reproducible datasets
 - **Monitoring & Observability**: Prometheus metrics, Grafana dashboards, and comprehensive logging
 - **Scalable Architecture**: Docker Compose setup with PostgreSQL, Redis, MinIO, and distributed workers
@@ -239,6 +240,64 @@ The system includes a powerful versioning system for managing multiple datasets 
 # Compare two versions (see what changed)
 ./manage_versions.sh compare kubernetes_v1 kubernetes_v2
 ```
+
+### Model Training
+
+Train popular language models (Llama, Qwen, Mistral, etc.) on your crawled dataset:
+
+```bash
+# Make script executable
+chmod +x train_model.sh
+
+# Run training script (interactive)
+./train_model.sh
+```
+
+The script will:
+1. **List available models** (Llama 2/3, Qwen, Mistral, Gemma, Phi-2, etc.)
+2. **Ask for training parameters** (epochs, batch size, learning rate)
+3. **Train the model** on your dataset shards
+4. **Save the trained model** to `models/` directory
+
+**Example:**
+```bash
+./train_model.sh
+# Select model: 4 (Qwen2 7B)
+# Epochs: 3
+# Batch size: 4
+# Learning rate: 2e-5
+# Output name: qwen2_k8s_trained
+```
+
+**Supported Models:**
+- Llama 2 (7B, 13B)
+- Llama 3 (8B)
+- Qwen2 (7B, 7B-Instruct)
+- Qwen2.5 (7B)
+- Mistral 7B
+- Gemma 7B
+- Phi-2
+- Custom models (any HuggingFace model ID)
+
+**Using the Trained Model:**
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Load your trained model
+model = AutoModelForCausalLM.from_pretrained("models/trained_qwen2_k8s")
+tokenizer = AutoTokenizer.from_pretrained("models/trained_qwen2_k8s")
+
+# Generate text
+inputs = tokenizer("What is Kubernetes?", return_tensors="pt")
+outputs = model.generate(**inputs, max_length=100)
+print(tokenizer.decode(outputs[0]))
+```
+
+**Training Requirements:**
+- GPU recommended (CUDA) for faster training
+- At least 16GB VRAM for 7B models
+- 32GB+ VRAM for 13B+ models
+- CPU training is possible but very slow
 
 ### Training Workflow
 

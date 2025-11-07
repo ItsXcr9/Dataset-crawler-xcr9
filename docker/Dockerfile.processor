@@ -34,6 +34,7 @@ WORKDIR /app
 
 # Copy application code
 COPY processor/ ./processor/
+COPY trainer/ ./trainer/
 COPY common/ ./common/
 COPY config/ ./config/
 

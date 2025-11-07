@@ -92,6 +92,9 @@ services:
       - LOG_LEVEL=INFO
     volumes:
       - ./dataset:/app/dataset:rw
+      - ./models:/app/models:rw
+      - ./trainer:/app/trainer:ro
+      - ./test_model.py:/app/test_model.py:ro
       - ./config:/app/config:ro
     depends_on:
       postgres:
