@@ -1,0 +1,73 @@
+# Web Crawler Configuration
+crawler:
+  max_depth: 3
+  concurrent_requests: 4
+  concurrent_requests_per_domain: 2
+  download_delay: 1
+  random_download_delay: true
+  respect_robots: true
+  respect_nofollow: true
+  user_agent: "ProfessionalDatasetCrawler/1.0 (+https://github.com/dataset-crawler)"
+
+  # Request settings
+  timeout: 30
+  retries: 3
+  retry_http_codes: [500, 502, 503, 504, 408, 429]
+
+  # Content filtering
+  min_content_length: 100
+  max_content_length: 5000000  # 5MB
+
+  # URL filtering
+  allowed_schemes: ['http', 'https']
+  deny_extensions:
+    - '.pdf'
+    - '.doc'
+    - '.docx'
+    - '.xls'
+    - '.xlsx'
+    - '.ppt'
+    - '.pptx'
+    - '.zip'
+    - '.rar'
+    - '.7z'
+    - '.tar'
+    - '.gz'
+    - '.bz2'
+    - '.exe'
+    - '.dmg'
+    - '.iso'
+    - '.mp3'
+    - '.mp4'
+    - '.avi'
+    - '.mov'
+    - '.wmv'
+    - '.flv'
+    - '.swf'
+    - '.jpg'
+    - '.jpeg'
+    - '.png'
+    - '.gif'
+    - '.bmp'
+    - '.tiff'
+    - '.webp'
+    - '.svg'
+    - '.ico'
+
+# Output settings
+output:
+  format: 'jsonl'
+  compression: null  # 'gzip', 'bz2', or null
+  batch_size: 100    # Documents per file
+
+# Logging
+logging:
+  level: 'INFO'
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  file: 'logs/crawler.log'
+
+# Metrics
+metrics:
+  enabled: true
+  port: 8000
+  path: '/metrics'

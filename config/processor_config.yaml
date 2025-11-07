@@ -1,0 +1,25 @@
+# Data Processor Configuration
+deduplication:
+  fuzzy_threshold: 0.8
+  num_perm: 128
+
+quality:
+  min_content_length: 500
+  max_content_length: 100000
+  min_quality_score: 0.6
+
+language:
+  supported_languages:
+    - en
+    - zh
+    - es
+    - fr
+    - de
+    - ja
+    - ko
+    - ru
+  min_confidence: 0.7
+
+processing:
+  batch_size: 1000
+  max_workers: 4
