@@ -45,3 +45,6 @@ asyncio==3.4.3
 # Docker and orchestration
 docker==7.0.0
 kubernetes==28.1.0
+
+# Version control integrations
+GitPython==3.1.43

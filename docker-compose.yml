@@ -77,7 +77,6 @@ services:
     deploy:
       replicas: 3
     restart: unless-stopped
-    user: "1000:1000"
 
   # Data processor service
   processor:
@@ -106,7 +105,6 @@ services:
     deploy:
       replicas: 2
     restart: unless-stopped
-    user: "1000:1000"
 
   # API service for job management and monitoring
   api:
