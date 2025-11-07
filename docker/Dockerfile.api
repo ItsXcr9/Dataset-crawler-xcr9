@@ -4,11 +4,17 @@ FROM python:3.11-slim
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
+    build-essential \
+    git \
+    libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+
+# Install pybind11 for fasttext
+RUN pip install --no-cache-dir pybind11
 
 # Copy requirements and install
 COPY requirements.txt .
