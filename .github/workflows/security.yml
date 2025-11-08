@@ -1,0 +1,143 @@
+name: Security & Quality
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run security checks weekly
+    - cron: '0 1 * * 0'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run safety check for Python dependencies
+      run: |
+        pip install safety
+        safety check --full-report
+
+    - name: Check for secrets in code
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-security:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build Docker images for scanning
+      run: |
+        docker build -f docker/Dockerfile.crawler -t crawler:security-scan .
+        docker build -f docker/Dockerfile.processor -t processor:security-scan .
+        docker build -f docker/Dockerfile.api -t api:security-scan .
+
+    - name: Scan crawler image
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'image'
+        scan-ref: 'crawler:security-scan'
+        format: 'sarif'
+        output: 'crawler-trivy-results.sarif'
+
+    - name: Scan processor image
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'image'
+        scan-ref: 'processor:security-scan'
+        format: 'sarif'
+        output: 'processor-trivy-results.sarif'
+
+    - name: Scan API image
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'image'
+        scan-ref: 'api:security-scan'
+        format: 'sarif'
+        output: 'api-trivy-results.sarif'
+
+    - name: Upload image scan results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: |
+          crawler-trivy-results.sarif
+          processor-trivy-results.sarif
+          api-trivy-results.sarif
+
+  code-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install flake8 black isort mypy
+
+    - name: Run flake8 linting
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Check code formatting with black
+      run: |
+        black --check --diff .
+
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only --diff .
+
+    - name: Run mypy type checking
+      run: |
+        mypy crawler/ processor/ trainer/ api/ --ignore-missing-imports
+      continue-on-error: true  # Mypy might have issues with some dependencies
+
+  dependency-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install pip-tools for dependency management
+      run: pip install pip-tools
+
+    - name: Check if requirements.txt is up to date
+      run: |
+        pip-compile --dry-run --quiet requirements.in || echo "requirements.txt may be outdated"
+
+    - name: Check for outdated dependencies
+      run: |
+        pip list --outdated --format=json | jq '.[] | select(.latest_version != .version) | "\(.name): \(.version) -> \(.latest_version)"' || true

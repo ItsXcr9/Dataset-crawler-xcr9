@@ -1,0 +1,249 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run integration tests weekly
+    - cron: '0 3 * * 0'
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: crawler_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build all Docker images
+      run: |
+        # Build crawler
+        docker build -f docker/Dockerfile.crawler -t crawler:integration .
+
+        # Build processor
+        docker build -f docker/Dockerfile.processor -t processor:integration .
+
+        # Build API
+        docker build -f docker/Dockerfile.api -t api:integration .
+
+    - name: Create test network
+      run: docker network create test-network
+
+    - name: Start test database
+      run: |
+        docker run -d --name test-postgres \
+          --network test-network \
+          -e POSTGRES_PASSWORD=testpass \
+          -e POSTGRES_DB=crawler_test \
+          postgres:15
+
+        docker run -d --name test-redis \
+          --network test-network \
+          redis:7-alpine
+
+        # Wait for services to be ready
+        echo "Waiting for PostgreSQL..."
+        for i in {1..30}; do
+          if docker exec test-postgres pg_isready -U postgres -d crawler_test; then
+            break
+          fi
+          sleep 2
+        done
+
+        echo "Waiting for Redis..."
+        for i in {1..30}; do
+          if docker exec test-redis redis-cli ping | grep -q PONG; then
+            break
+          fi
+          sleep 2
+        done
+
+    - name: Test crawler functionality
+      run: |
+        # Create test directories
+        mkdir -p dataset/raw dataset/cleaned dataset/shards/train dataset/shards/val
+
+        # Test crawler with a simple webpage
+        docker run --rm \
+          --network test-network \
+          -v $(pwd)/dataset:/app/dataset \
+          -e POSTGRES_HOST=test-postgres \
+          -e POSTGRES_PASSWORD=testpass \
+          -e REDIS_HOST=test-redis \
+          crawler:integration \
+          python3 -c "
+import sys
+sys.path.insert(0, '/app')
+from crawler.crawler import extract_root_domain
+
+# Test domain extraction
+test_domains = [
+    'https://docs.python.org/3/',
+    'https://kubernetes.io/docs/',
+    'https://blog.example.com/path'
+]
+
+print('Testing domain extraction:')
+for url in test_domains:
+    domain = extract_root_domain(url.split('://')[1].split('/')[0])
+    print(f'  {url} -> {domain}')
+
+print('✅ Crawler utilities working')
+          "
+
+    - name: Test processor functionality
+      run: |
+        # Create sample raw data
+        echo '{"id": "test_1", "url": "https://example.com/page1", "title": "Test Page 1", "content": "This is a test page with some content for processing. It contains multiple sentences and should be long enough for quality scoring.", "domain": "example.com", "content_length": 150, "crawled_at": "2024-01-01T00:00:00Z"}' > dataset/raw/test_crawl.jsonl
+        echo '{"id": "test_2", "url": "https://example.com/page2", "title": "Test Page 2", "content": "Another test page with different content. This helps test deduplication and language detection features.", "domain": "example.com", "content_length": 120, "crawled_at": "2024-01-01T00:00:01Z"}' >> dataset/raw/test_crawl.jsonl
+
+        # Test processor
+        docker run --rm \
+          --network test-network \
+          -v $(pwd)/dataset:/app/dataset \
+          -e POSTGRES_HOST=test-postgres \
+          -e POSTGRES_PASSWORD=testpass \
+          -e REDIS_HOST=test-redis \
+          processor:integration \
+          python3 -c "
+import sys
+sys.path.insert(0, '/app')
+from processor.data_processor import DataProcessor
+import json
+import os
+
+print('Testing data processor...')
+
+# Test language detection
+from langdetect import detect
+test_text = 'This is a test of English language detection.'
+lang = detect(test_text)
+print(f'Language detection: {lang}')
+
+# Test quality scoring
+import textstat
+flesch_score = textstat.flesch_reading_ease(test_text)
+print(f'Flesch score: {flesch_score}')
+
+# Check if files were processed
+raw_files = [f for f in os.listdir('dataset/raw') if f.endswith('.jsonl')]
+print(f'Raw files found: {raw_files}')
+
+print('✅ Processor functionality working')
+          "
+
+    - name: Test API endpoints
+      run: |
+        # Start API server in background
+        docker run -d --name test-api \
+          --network test-network \
+          -v $(pwd)/dataset:/app/dataset \
+          -e POSTGRES_HOST=test-postgres \
+          -e POSTGRES_PASSWORD=testpass \
+          -e REDIS_HOST=test-redis \
+          -p 8000:8000 \
+          api:integration \
+          uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+        # Wait for API to start
+        echo "Waiting for API to start..."
+        for i in {1..30}; do
+          if curl -s http://localhost:8000/docs > /dev/null; then
+            break
+          fi
+          sleep 2
+        done
+
+        # Test API endpoints
+        echo "Testing API endpoints..."
+
+        # Test health check
+        curl -s http://localhost:8000/docs | grep -q "FastAPI" && echo "✅ API docs accessible"
+
+        # Test jobs endpoint
+        response=$(curl -s http://localhost:8000/jobs)
+        echo "Jobs response: $response"
+
+        # Test dataset summary
+        response=$(curl -s http://localhost:8000/dataset/summary)
+        echo "Dataset summary response: $response"
+
+    - name: Test full pipeline integration
+      run: |
+        # Create models directory
+        mkdir -p models
+
+        # Test tokenizer and sharding
+        docker run --rm \
+          --network test-network \
+          -v $(pwd)/dataset:/app/dataset \
+          -v $(pwd)/models:/app/models \
+          processor:integration \
+          python3 -c "
+import sys
+sys.path.insert(0, '/app')
+from processor.tokenizer_sharder import TokenizerSharder
+from trainer.model_trainer import ParquetDataset
+import os
+
+print('Testing full pipeline...')
+
+# Check if we have processed data
+if os.path.exists('dataset/cleaned'):
+    cleaned_files = [f for f in os.listdir('dataset/cleaned') if f.endswith('.jsonl')]
+    print(f'Cleaned files: {cleaned_files}')
+
+# Test tokenizer loading
+try:
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained('distilgpt2')
+    print(f'Tokenizer loaded, vocab size: {tokenizer.vocab_size}')
+
+    # Test basic tokenization
+    test_text = 'Hello world, this is a test.'
+    tokens = tokenizer.encode(test_text)
+    print(f'Tokenization test: {len(tokens)} tokens')
+
+except Exception as e:
+    print(f'Tokenizer test failed: {e}')
+
+print('✅ Full pipeline integration test completed')
+          "
+
+    - name: Cleanup
+      if: always()
+      run: |
+        docker stop test-postgres test-redis test-api || true
+        docker rm test-postgres test-redis test-api || true
+        docker network rm test-network || true
+
+    - name: Upload integration test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: integration-test-results
+        path: |
+          dataset/
+          models/

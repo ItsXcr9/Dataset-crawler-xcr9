@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Run basic imports test
+      run: |
+        python -c "import scrapy; print('Scrapy OK')"
+        python -c "from transformers import AutoTokenizer; print('Transformers OK')"
+        python -c "import torch; print('PyTorch OK')"
+        python -c "import datasets; print('Datasets OK')"
+
+    - name: Run unit tests
+      run: |
+        pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
+
+    - name: Run crawler tests
+      run: |
+        cd crawler
+        python -c "from crawler import DatasetCrawler; print('Crawler import OK')"
+
+    - name: Run processor tests
+      run: |
+        cd processor
+        python -c "from data_processor import DataProcessor; print('Processor import OK')"
+        python -c "from tokenizer_sharder import TokenizerSharder; print('Tokenizer import OK')"
+
+    - name: Run trainer tests
+      run: |
+        cd trainer
+        python -c "from model_trainer import ParquetDataset, train_model; print('Trainer import OK')"
+
+    - name: Test model loading (small model)
+      run: |
+        python -c "
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained('distilgpt2')
+        print('Tokenizer loaded successfully')
+        print(f'Vocab size: {tokenizer.vocab_size}')
+        "
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build crawler Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile.crawler
+        push: false
+        tags: crawler:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build processor Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile.processor
+        push: false
+        tags: processor:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build API Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile.api
+        push: false
+        tags: api:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build WebUI Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile.webui
+        push: false
+        tags: webui:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  quick-training-test:
+    runs-on: ubuntu-latest
+    needs: docker-build
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build processor image for training test
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile.processor
+        push: false
+        tags: processor:training-test
+        cache-from: type=gha
+
+    - name: Create test dataset directory
+      run: |
+        mkdir -p dataset/shards/train dataset/shards/val models
+
+    - name: Create minimal test dataset
+      run: |
+        # Create a small parquet file with test data for training
+        python -c "
+        import pyarrow as pa
+        import pandas as pd
+        import numpy as np
+
+        # Create minimal test data (just a few samples)
+        data = {
+            'doc_id': ['test_1', 'test_2'],
+            'tokens': [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
+            'attention_mask': [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1]],
+            'language': ['en', 'en'],
+            'quality_score': [0.8, 0.9],
+            'token_count': [5, 5]
+        }
+
+        df = pd.DataFrame(data)
+        table = pa.Table.from_pandas(df)
+
+        # Save as parquet
+        table.to_pandas().to_parquet('dataset/shards/train/test_shard.parquet')
+        table.to_pandas().to_parquet('dataset/shards/val/test_shard.parquet')
+
+        print('Test dataset created')
+        "
+
+    - name: Test model training with minimal data
+      run: |
+        docker run --rm \
+          -v $(pwd)/dataset:/app/dataset \
+          -v $(pwd)/models:/app/models \
+          processor:training-test \
+          python3 -c "
+import sys
+sys.path.insert(0, '/app')
+from trainer.model_trainer import train_model
+
+# Quick test with very small model and data
+try:
+    train_model(
+        model_name='distilgpt2',
+        train_dir='dataset/shards/train',
+        val_dir='dataset/shards/val',
+        output_dir='models/test_model',
+        epochs=1,
+        batch_size=1,
+        learning_rate=1e-4,
+        max_length=10,
+        save_steps=1,
+        eval_steps=1,
+        logging_steps=1
+    )
+    print('Training test passed!')
+except Exception as e:
+    print(f'Training test failed: {e}')
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+          "
+
+    - name: Test model inference
+      run: |
+        docker run --rm \
+          -v $(pwd)/models:/app/models \
+          processor:training-test \
+          python3 test_model.py models/test_model --prompt "Hello" --max_length 20
