@@ -15,7 +15,10 @@ jobs:
         python-version: ['3.12']
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Install system dependencies
       run: |
@@ -116,7 +119,29 @@ jobs:
     timeout-minutes: 90
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: ${{ github.ref }}
+
+    - name: Verify checkout
+      run: |
+        echo "Repository: ${{ github.repository }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "SHA: ${{ github.sha }}"
+        echo "Current directory: $(pwd)"
+        echo "Files in root:"
+        ls -la
+        echo "Checking docker directory:"
+        if [ -d "docker" ]; then
+          echo "✅ docker directory exists"
+          ls -la docker/
+        else
+          echo "❌ docker directory not found!"
+          echo "Checking if we're in the right location..."
+          find . -name "Dockerfile.crawler" -type f 2>/dev/null || echo "Dockerfile.crawler not found anywhere"
+        fi
 
     - name: Maximize build disk space
       uses: easimon/maximize-build-space@master
@@ -137,16 +162,6 @@ jobs:
         docker builder prune -af || true
         echo "Docker disk usage:"
         docker system df
-
-    - name: Verify docker directory exists
-      run: |
-        echo "Current directory: $(pwd)"
-        echo "Listing files:"
-        ls -la
-        echo "Checking docker directory:"
-        ls -la docker/ || echo "docker directory not found!"
-        echo "Checking Dockerfile:"
-        test -f docker/Dockerfile.crawler && echo "✅ Dockerfile.crawler exists" || echo "❌ Dockerfile.crawler not found"
 
     - name: Build crawler Docker image
       uses: docker/build-push-action@v5
@@ -222,7 +237,10 @@ jobs:
     timeout-minutes: 60
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
