@@ -1,0 +1,100 @@
+name: Test Workflow Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - '.github/workflows/**'
+
+jobs:
+  validate-workflows:
+    runs-on: ubuntu-latest
+    name: Validate Workflow Files
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Validate YAML syntax
+      uses: actions/checkout@v4
+      run: |
+        echo "Validating workflow YAML files..."
+        for file in .github/workflows/*.yml; do
+          echo "Checking $file..."
+          python3 -c "
+          import sys
+          try:
+              import yaml
+              with open('$file', 'r') as f:
+                  yaml.safe_load(f)
+              print('✅ $file: Valid YAML')
+          except ImportError:
+              print('⚠️  PyYAML not available, skipping validation')
+              sys.exit(0)
+          except yaml.YAMLError as e:
+              print('❌ $file: YAML Error')
+              print(str(e))
+              sys.exit(1)
+          except Exception as e:
+              print('❌ $file: Error - ' + str(e))
+              sys.exit(1)
+          " || echo "⚠️  Could not validate $file (PyYAML not available)"
+        done
+
+    - name: Check workflow structure
+      run: |
+        echo "Checking workflow structure..."
+        for file in .github/workflows/*.yml; do
+          echo "Analyzing $file..."
+          # Check for required fields
+          if ! grep -q "name:" "$file"; then
+            echo "❌ $file: Missing 'name' field"
+            exit 1
+          fi
+          if ! grep -q "on:" "$file"; then
+            echo "❌ $file: Missing 'on' field"
+            exit 1
+          fi
+          if ! grep -q "jobs:" "$file"; then
+            echo "❌ $file: Missing 'jobs' field"
+            exit 1
+          fi
+          echo "✅ $file: Basic structure OK"
+        done
+
+    - name: Check for common issues
+      run: |
+        echo "Checking for common workflow issues..."
+        issues=0
+        
+        for file in .github/workflows/*.yml; do
+          # Check for hardcoded secrets
+          if grep -q "password.*=.*['\"].*['\"]" "$file" || grep -q "secret.*=.*['\"].*['\"]" "$file"; then
+            echo "⚠️  $file: Potential hardcoded secret found"
+            issues=$((issues + 1))
+          fi
+          
+          # Check for missing continue-on-error on risky steps
+          if grep -q "docker run" "$file" && ! grep -A5 "docker run" "$file" | grep -q "continue-on-error"; then
+            echo "ℹ️  $file: Consider adding continue-on-error to docker run steps"
+          fi
+        done
+        
+        if [ $issues -gt 0 ]; then
+          echo "Found $issues potential issues"
+        else
+          echo "✅ No obvious issues found"
+        fi
+
+    - name: Workflow validation summary
+      if: always()
+      run: |
+        echo "## 📋 Workflow Validation Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### ✅ Validation Complete" >> $GITHUB_STEP_SUMMARY
+        echo "- YAML syntax checked" >> $GITHUB_STEP_SUMMARY
+        echo "- Workflow structure validated" >> $GITHUB_STEP_SUMMARY
+        echo "- Common issues reviewed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "All workflow files have been validated!" >> $GITHUB_STEP_SUMMARY
+

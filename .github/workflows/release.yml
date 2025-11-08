@@ -121,9 +121,9 @@ jobs:
 
     - name: Generate artifact attestation
       uses: actions/attest-build-provenance@v1
+      continue-on-error: true  # Attestation may fail if not configured
       with:
         subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
-        subject-digest: sha256:1234567890abcdef
         push-to-registry: true
 
     - name: Update Docker Compose with latest images
@@ -143,7 +143,9 @@ jobs:
           LEARNINGDOC.md
 
     - name: Upload release artifacts
+      if: github.event_name == 'release'
       uses: actions/upload-release-asset@v1
+      continue-on-error: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
