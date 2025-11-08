@@ -186,15 +186,15 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.14.0'
+        python-version: '3.12'
 
     - name: Cache pip packages
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-3.14.0-${{ hashFiles('requirements*.txt') }}
+        key: ${{ runner.os }}-pip-3.12-${{ hashFiles('requirements*.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-3.14.0-
+          ${{ runner.os }}-pip-3.12-
 
     - name: Install dependencies
       run: |
@@ -248,7 +248,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.14.0'
+        python-version: '3.12'
 
     - name: Install pip-tools for dependency management
       run: pip install pip-tools

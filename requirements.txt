@@ -6,8 +6,8 @@ beautifulsoup4==4.12.2
 lxml==4.9.3
 
 # Data processing
-pandas==2.1.4
-numpy==1.26.2
+pandas>=2.2.0
+numpy>=1.26.2
 pyarrow==14.0.1
 datasets==2.15.0
 
