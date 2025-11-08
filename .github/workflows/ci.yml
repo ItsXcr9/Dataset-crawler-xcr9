@@ -56,7 +56,7 @@ jobs:
 
     - name: Test model loading (small model)
       run: |
-        python -c "
+        python3 -c "
         from transformers import AutoTokenizer
         tokenizer = AutoTokenizer.from_pretrained('distilgpt2')
         print('Tokenizer loaded successfully')
@@ -166,37 +166,41 @@ jobs:
 
     - name: Test model training with minimal data
       run: |
+        # Create test script
+        cat > test_training.py << 'EOF'
+        import sys
+        sys.path.insert(0, '/app')
+        from trainer.model_trainer import train_model
+
+        # Quick test with very small model and data
+        try:
+            train_model(
+                model_name='distilgpt2',
+                train_dir='dataset/shards/train',
+                val_dir='dataset/shards/val',
+                output_dir='models/test_model',
+                epochs=1,
+                batch_size=1,
+                learning_rate=1e-4,
+                max_length=10,
+                save_steps=1,
+                eval_steps=1,
+                logging_steps=1
+            )
+            print('Training test passed!')
+        except Exception as e:
+            print(f'Training test failed: {e}')
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        EOF
+
         docker run --rm \
           -v $(pwd)/dataset:/app/dataset \
           -v $(pwd)/models:/app/models \
+          -v $(pwd)/test_training.py:/app/test_training.py \
           processor:training-test \
-          python3 -c "
-import sys
-sys.path.insert(0, '/app')
-from trainer.model_trainer import train_model
-
-# Quick test with very small model and data
-try:
-    train_model(
-        model_name='distilgpt2',
-        train_dir='dataset/shards/train',
-        val_dir='dataset/shards/val',
-        output_dir='models/test_model',
-        epochs=1,
-        batch_size=1,
-        learning_rate=1e-4,
-        max_length=10,
-        save_steps=1,
-        eval_steps=1,
-        logging_steps=1
-    )
-    print('Training test passed!')
-except Exception as e:
-    print(f'Training test failed: {e}')
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-          "
+          python3 test_training.py
 
     - name: Test model inference
       run: |

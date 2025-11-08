@@ -85,33 +85,37 @@ jobs:
         # Create test directories
         mkdir -p dataset/raw dataset/cleaned dataset/shards/train dataset/shards/val
 
+        # Create test script
+        cat > test_crawler.py << 'EOF'
+        import sys
+        sys.path.insert(0, '/app')
+        from crawler.crawler import extract_root_domain
+
+        # Test domain extraction
+        test_domains = [
+            'https://docs.python.org/3/',
+            'https://kubernetes.io/docs/',
+            'https://blog.example.com/path'
+        ]
+
+        print('Testing domain extraction:')
+        for url in test_domains:
+            domain = extract_root_domain(url.split('://')[1].split('/')[0])
+            print(f'  {url} -> {domain}')
+
+        print('✅ Crawler utilities working')
+        EOF
+
         # Test crawler with a simple webpage
         docker run --rm \
           --network test-network \
           -v $(pwd)/dataset:/app/dataset \
+          -v $(pwd)/test_crawler.py:/app/test_crawler.py \
           -e POSTGRES_HOST=test-postgres \
           -e POSTGRES_PASSWORD=testpass \
           -e REDIS_HOST=test-redis \
           crawler:integration \
-          python3 -c "
-import sys
-sys.path.insert(0, '/app')
-from crawler.crawler import extract_root_domain
-
-# Test domain extraction
-test_domains = [
-    'https://docs.python.org/3/',
-    'https://kubernetes.io/docs/',
-    'https://blog.example.com/path'
-]
-
-print('Testing domain extraction:')
-for url in test_domains:
-    domain = extract_root_domain(url.split('://')[1].split('/')[0])
-    print(f'  {url} -> {domain}')
-
-print('✅ Crawler utilities working')
-          "
+          python3 test_crawler.py
 
     - name: Test processor functionality
       run: |
@@ -119,40 +123,44 @@ print('✅ Crawler utilities working')
         echo '{"id": "test_1", "url": "https://example.com/page1", "title": "Test Page 1", "content": "This is a test page with some content for processing. It contains multiple sentences and should be long enough for quality scoring.", "domain": "example.com", "content_length": 150, "crawled_at": "2024-01-01T00:00:00Z"}' > dataset/raw/test_crawl.jsonl
         echo '{"id": "test_2", "url": "https://example.com/page2", "title": "Test Page 2", "content": "Another test page with different content. This helps test deduplication and language detection features.", "domain": "example.com", "content_length": 120, "crawled_at": "2024-01-01T00:00:01Z"}' >> dataset/raw/test_crawl.jsonl
 
+        # Create test script
+        cat > test_processor.py << 'EOF'
+        import sys
+        sys.path.insert(0, '/app')
+        from processor.data_processor import DataProcessor
+        import json
+        import os
+
+        print('Testing data processor...')
+
+        # Test language detection
+        from langdetect import detect
+        test_text = 'This is a test of English language detection.'
+        lang = detect(test_text)
+        print(f'Language detection: {lang}')
+
+        # Test quality scoring
+        import textstat
+        flesch_score = textstat.flesch_reading_ease(test_text)
+        print(f'Flesch score: {flesch_score}')
+
+        # Check if files were processed
+        raw_files = [f for f in os.listdir('dataset/raw') if f.endswith('.jsonl')]
+        print(f'Raw files found: {raw_files}')
+
+        print('✅ Processor functionality working')
+        EOF
+
         # Test processor
         docker run --rm \
           --network test-network \
           -v $(pwd)/dataset:/app/dataset \
+          -v $(pwd)/test_processor.py:/app/test_processor.py \
           -e POSTGRES_HOST=test-postgres \
           -e POSTGRES_PASSWORD=testpass \
           -e REDIS_HOST=test-redis \
           processor:integration \
-          python3 -c "
-import sys
-sys.path.insert(0, '/app')
-from processor.data_processor import DataProcessor
-import json
-import os
-
-print('Testing data processor...')
-
-# Test language detection
-from langdetect import detect
-test_text = 'This is a test of English language detection.'
-lang = detect(test_text)
-print(f'Language detection: {lang}')
-
-# Test quality scoring
-import textstat
-flesch_score = textstat.flesch_reading_ease(test_text)
-print(f'Flesch score: {flesch_score}')
-
-# Check if files were processed
-raw_files = [f for f in os.listdir('dataset/raw') if f.endswith('.jsonl')]
-print(f'Raw files found: {raw_files}')
-
-print('✅ Processor functionality working')
-          "
+          python3 test_processor.py
 
     - name: Test API endpoints
       run: |
@@ -195,42 +203,46 @@ print('✅ Processor functionality working')
         # Create models directory
         mkdir -p models
 
+        # Create test script
+        cat > test_pipeline.py << 'EOF'
+        import sys
+        sys.path.insert(0, '/app')
+        from processor.tokenizer_sharder import TokenizerSharder
+        from trainer.model_trainer import ParquetDataset
+        import os
+
+        print('Testing full pipeline...')
+
+        # Check if we have processed data
+        if os.path.exists('dataset/cleaned'):
+            cleaned_files = [f for f in os.listdir('dataset/cleaned') if f.endswith('.jsonl')]
+            print(f'Cleaned files: {cleaned_files}')
+
+        # Test tokenizer loading
+        try:
+            from transformers import AutoTokenizer
+            tokenizer = AutoTokenizer.from_pretrained('distilgpt2')
+            print(f'Tokenizer loaded, vocab size: {tokenizer.vocab_size}')
+
+            # Test basic tokenization
+            test_text = 'Hello world, this is a test.'
+            tokens = tokenizer.encode(test_text)
+            print(f'Tokenization test: {len(tokens)} tokens')
+
+        except Exception as e:
+            print(f'Tokenizer test failed: {e}')
+
+        print('✅ Full pipeline integration test completed')
+        EOF
+
         # Test tokenizer and sharding
         docker run --rm \
           --network test-network \
           -v $(pwd)/dataset:/app/dataset \
           -v $(pwd)/models:/app/models \
+          -v $(pwd)/test_pipeline.py:/app/test_pipeline.py \
           processor:integration \
-          python3 -c "
-import sys
-sys.path.insert(0, '/app')
-from processor.tokenizer_sharder import TokenizerSharder
-from trainer.model_trainer import ParquetDataset
-import os
-
-print('Testing full pipeline...')
-
-# Check if we have processed data
-if os.path.exists('dataset/cleaned'):
-    cleaned_files = [f for f in os.listdir('dataset/cleaned') if f.endswith('.jsonl')]
-    print(f'Cleaned files: {cleaned_files}')
-
-# Test tokenizer loading
-try:
-    from transformers import AutoTokenizer
-    tokenizer = AutoTokenizer.from_pretrained('distilgpt2')
-    print(f'Tokenizer loaded, vocab size: {tokenizer.vocab_size}')
-
-    # Test basic tokenization
-    test_text = 'Hello world, this is a test.'
-    tokens = tokenizer.encode(test_text)
-    print(f'Tokenization test: {len(tokens)} tokens')
-
-except Exception as e:
-    print(f'Tokenizer test failed: {e}')
-
-print('✅ Full pipeline integration test completed')
-          "
+          python3 test_pipeline.py
 
     - name: Cleanup
       if: always()

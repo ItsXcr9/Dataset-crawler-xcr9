@@ -34,7 +34,7 @@ jobs:
 
     - name: Generate synthetic dataset for nightly test
       run: |
-        python -c "
+        cat > generate_nightly_dataset.py << 'EOF'
         import pyarrow as pa
         import pandas as pd
         import numpy as np
@@ -96,46 +96,53 @@ jobs:
         with open('dataset_backups/test_nightly/version_info.json', 'w') as f:
             json.dump(version_info, f, indent=2)
 
-        print(f'Created nightly test dataset:')
+        print('Created nightly test dataset:')
         print(f'  Train samples: {len(train_samples)}')
         print(f'  Val samples: {len(val_samples)}')
-        print(f'  Total tokens: {sum(len(s[\"tokens\"]) for s in train_samples + val_samples)}')
-        "
+        print(f'  Total tokens: {sum(len(s["tokens"]) for s in train_samples + val_samples)}')
+        EOF
+
+        python3 generate_nightly_dataset.py
 
     - name: Run quick training test (DialoGPT)
       run: |
         echo "Testing with DialoGPT-small..."
+
+        # Create test script
+        cat > test_dialogpt.py << 'EOF'
+        import sys
+        sys.path.insert(0, '/app')
+        from trainer.model_trainer import train_model
+
+        try:
+            train_model(
+                model_name='microsoft/DialoGPT-small',
+                train_dir='dataset/shards/train',
+                val_dir='dataset/shards/val',
+                output_dir='models/nightly_dialogpt',
+                epochs=1,
+                batch_size=2,
+                learning_rate=5e-5,
+                max_length=512,
+                save_steps=100,
+                eval_steps=100,
+                logging_steps=50,
+                fp16=False
+            )
+            print('✅ DialoGPT training completed successfully!')
+        except Exception as e:
+            print(f'❌ DialoGPT training failed: {e}')
+            import traceback
+            traceback.print_exc()
+            exit(1)
+        EOF
+
         docker run --rm \
           -v $(pwd)/dataset:/app/dataset \
           -v $(pwd)/models:/app/models \
+          -v $(pwd)/test_dialogpt.py:/app/test_dialogpt.py \
           processor:nightly \
-          python3 -c "
-import sys
-sys.path.insert(0, '/app')
-from trainer.model_trainer import train_model
-
-try:
-    train_model(
-        model_name='microsoft/DialoGPT-small',
-        train_dir='dataset/shards/train',
-        val_dir='dataset/shards/val',
-        output_dir='models/nightly_dialogpt',
-        epochs=1,
-        batch_size=2,
-        learning_rate=5e-5,
-        max_length=512,
-        save_steps=100,
-        eval_steps=100,
-        logging_steps=50,
-        fp16=False
-    )
-    print('✅ DialoGPT training completed successfully!')
-except Exception as e:
-    print(f'❌ DialoGPT training failed: {e}')
-    import traceback
-    traceback.print_exc()
-    exit(1)
-          "
+          python3 test_dialogpt.py
 
     - name: Test DialoGPT model inference
       run: |
@@ -149,37 +156,42 @@ except Exception as e:
     - name: Run training test (DistilGPT-2)
       run: |
         echo "Testing with DistilGPT-2..."
+
+        # Create test script
+        cat > test_distilgpt.py << 'EOF'
+        import sys
+        sys.path.insert(0, '/app')
+        from trainer.model_trainer import train_model
+
+        try:
+            train_model(
+                model_name='distilgpt2',
+                train_dir='dataset/shards/train',
+                val_dir='dataset/shards/val',
+                output_dir='models/nightly_distilgpt2',
+                epochs=1,
+                batch_size=4,
+                learning_rate=5e-5,
+                max_length=512,
+                save_steps=100,
+                eval_steps=100,
+                logging_steps=50,
+                fp16=False
+            )
+            print('✅ DistilGPT-2 training completed successfully!')
+        except Exception as e:
+            print(f'❌ DistilGPT-2 training failed: {e}')
+            import traceback
+            traceback.print_exc()
+            exit(1)
+        EOF
+
         docker run --rm \
           -v $(pwd)/dataset:/app/dataset \
           -v $(pwd)/models:/app/models \
+          -v $(pwd)/test_distilgpt.py:/app/test_distilgpt.py \
           processor:nightly \
-          python3 -c "
-import sys
-sys.path.insert(0, '/app')
-from trainer.model_trainer import train_model
-
-try:
-    train_model(
-        model_name='distilgpt2',
-        train_dir='dataset/shards/train',
-        val_dir='dataset/shards/val',
-        output_dir='models/nightly_distilgpt2',
-        epochs=1,
-        batch_size=4,
-        learning_rate=5e-5,
-        max_length=512,
-        save_steps=100,
-        eval_steps=100,
-        logging_steps=50,
-        fp16=False
-    )
-    print('✅ DistilGPT-2 training completed successfully!')
-except Exception as e:
-    print(f'❌ DistilGPT-2 training failed: {e}')
-    import traceback
-    traceback.print_exc()
-    exit(1)
-          "
+          python3 test_distilgpt.py
 
     - name: Test DistilGPT-2 model inference
       run: |
