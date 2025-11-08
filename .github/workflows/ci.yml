@@ -138,11 +138,21 @@ jobs:
         echo "Docker disk usage:"
         docker system df
 
+    - name: Verify docker directory exists
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Listing files:"
+        ls -la
+        echo "Checking docker directory:"
+        ls -la docker/ || echo "docker directory not found!"
+        echo "Checking Dockerfile:"
+        test -f docker/Dockerfile.crawler && echo "✅ Dockerfile.crawler exists" || echo "❌ Dockerfile.crawler not found"
+
     - name: Build crawler Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: docker/Dockerfile.crawler
+        file: ./docker/Dockerfile.crawler
         push: false
         tags: crawler:test
         cache-from: type=gha
@@ -159,7 +169,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: docker/Dockerfile.processor
+        file: ./docker/Dockerfile.processor
         push: false
         tags: processor:test
         cache-from: type=gha
@@ -176,7 +186,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: docker/Dockerfile.api
+        file: ./docker/Dockerfile.api
         push: false
         tags: api:test
         cache-from: type=gha
@@ -193,7 +203,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: docker/Dockerfile.webui
+        file: ./docker/Dockerfile.webui
         push: false
         tags: webui:test
         cache-from: type=gha
@@ -221,7 +231,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: docker/Dockerfile.processor
+        file: ./docker/Dockerfile.processor
         push: false
         tags: processor:training-test
         cache-from: type=gha
