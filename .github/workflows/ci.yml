@@ -34,17 +34,30 @@ jobs:
       run: |
         python -m pip install --upgrade pip setuptools wheel
         echo "Installing requirements.txt..."
-        pip install --no-cache-dir -r requirements.txt || echo "Some requirements failed, continuing..."
+        pip install -r requirements.txt
         echo "Installing dev requirements..."
-        pip install --no-cache-dir -r requirements-dev.txt || echo "Some dev requirements failed, continuing..."
+        pip install -r requirements-dev.txt
+        echo "Verifying critical packages..."
+        python -m pip list | grep -i scrapy && echo "✅ Scrapy installed" || echo "⚠️ Scrapy not found"
+        python -m pip list | grep -i transformers && echo "✅ Transformers installed" || echo "⚠️ Transformers not found"
+        python -m pip list | grep -i torch && echo "✅ PyTorch installed" || echo "⚠️ PyTorch not found"
+        python -m pip list | grep -i datasets && echo "✅ Datasets installed" || echo "⚠️ Datasets not found"
       timeout-minutes: 20
+
+    - name: Verify Python environment
+      run: |
+        echo "Python version: $(python --version)"
+        echo "Pip version: $(pip --version)"
+        echo "Python path: $(which python)"
 
     - name: Run basic imports test
       run: |
-        python -c "import scrapy; print('Scrapy OK')"
-        python -c "from transformers import AutoTokenizer; print('Transformers OK')"
-        python -c "import torch; print('PyTorch OK')"
-        python -c "import datasets; print('Datasets OK')"
+        echo "Testing imports..."
+        python -c "import scrapy; print('✅ Scrapy OK')" || (echo "❌ Scrapy import failed" && exit 1)
+        python -c "from transformers import AutoTokenizer; print('✅ Transformers OK')" || (echo "❌ Transformers import failed" && exit 1)
+        python -c "import torch; print('✅ PyTorch OK')" || (echo "❌ PyTorch import failed" && exit 1)
+        python -c "import datasets; print('✅ Datasets OK')" || (echo "❌ Datasets import failed" && exit 1)
+        echo "✅ All imports successful!"
 
     - name: Run unit tests
       run: |
