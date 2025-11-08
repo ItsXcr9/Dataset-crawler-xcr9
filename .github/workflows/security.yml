@@ -172,6 +172,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libxml2-dev \
+          libxslt1-dev \
+          libffi-dev \
+          libssl-dev \
+          build-essential \
+          python3-dev
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -181,9 +192,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-3.10-${{ hashFiles('requirements*.txt') }}
+        key: ${{ runner.os }}-pip-3.14.0-${{ hashFiles('requirements*.txt') }}
         restore-keys: |
-          ${{ runner.os }}-pip-3.10-
+          ${{ runner.os }}-pip-3.14.0-
 
     - name: Install dependencies
       run: |
@@ -222,6 +233,17 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libxml2-dev \
+          libxslt1-dev \
+          libffi-dev \
+          libssl-dev \
+          build-essential \
+          python3-dev
 
     - name: Set up Python
       uses: actions/setup-python@v4
