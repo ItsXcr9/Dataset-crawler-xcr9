@@ -142,7 +142,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: ./docker/Dockerfile.crawler
+        file: docker/Dockerfile.crawler
         push: false
         tags: crawler:test
         cache-from: type=gha
@@ -159,7 +159,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: ./docker/Dockerfile.processor
+        file: docker/Dockerfile.processor
         push: false
         tags: processor:test
         cache-from: type=gha
@@ -176,7 +176,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: ./docker/Dockerfile.api
+        file: docker/Dockerfile.api
         push: false
         tags: api:test
         cache-from: type=gha
@@ -193,7 +193,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: ./docker/Dockerfile.webui
+        file: docker/Dockerfile.webui
         push: false
         tags: webui:test
         cache-from: type=gha
@@ -221,7 +221,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: ./docker/Dockerfile.processor
+        file: docker/Dockerfile.processor
         push: false
         tags: processor:training-test
         cache-from: type=gha
