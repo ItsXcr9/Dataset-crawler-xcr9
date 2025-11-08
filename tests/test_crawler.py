@@ -38,13 +38,13 @@ class TestCrawlerIntegration:
 
         # Test that the class can be imported and has expected attributes
         assert hasattr(DatasetCrawler, 'name')
-        assert DatasetCrawler.name == 'dataset_crawler'
+        assert DatasetCrawler.name == 'professional_crawler'
 
     def test_crawler_imports(self):
         """Test that all crawler components can be imported"""
         try:
-            from crawler.crawler import DatasetCrawler
-            from crawler.worker import CrawlerWorker
+            from crawler.crawler import DatasetCrawler, run_crawler
+            from crawler.worker import main
             # If we get here without exceptions, imports work
             assert True
         except ImportError:

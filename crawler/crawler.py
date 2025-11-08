@@ -241,16 +241,14 @@ class ProfessionalCrawler(CrawlSpider):
         logger.info("Crawler finished", reason=reason, total_pages=len(self.visited_urls))
 
 
-def run_crawler(start_url: str, max_depth: int = 3, output_dir: str = 'dataset/raw'):
-    """Run the crawler with given parameters"""
-
-    # Parse start URL to get domain
-    parsed = urlparse(start_url)
-    netloc = parsed.netloc
+def extract_root_domain(netloc: str) -> str:
+    """Extract root domain from netloc to allow all subdomains.
     
-    # Extract root domain to allow all subdomains
-    # e.g., docs.kubernetes.io -> kubernetes.io
-    # e.g., blog.example.com -> example.com
+    Examples:
+        docs.kubernetes.io -> kubernetes.io
+        blog.example.com -> example.com
+        sub.example.co.uk -> example.co.uk
+    """
     domain_parts = netloc.split('.')
     if len(domain_parts) >= 2:
         # Get root domain (last 2 parts for most TLDs, or last 3 for .co.uk, .com.au, etc.)
@@ -263,7 +261,18 @@ def run_crawler(start_url: str, max_depth: int = 3, output_dir: str = 'dataset/r
             root_domain = '.'.join(domain_parts[-2:])
     else:
         root_domain = netloc
+    return root_domain
+
+
+def run_crawler(start_url: str, max_depth: int = 3, output_dir: str = 'dataset/raw'):
+    """Run the crawler with given parameters"""
+
+    # Parse start URL to get domain
+    parsed = urlparse(start_url)
+    netloc = parsed.netloc
     
+    # Extract root domain to allow all subdomains
+    root_domain = extract_root_domain(netloc)
     allowed_domains = [root_domain]
     
     logger.info("Domain configuration", 
@@ -310,3 +319,7 @@ if __name__ == '__main__':
     output_dir = sys.argv[3] if len(sys.argv) > 3 else 'dataset/raw'
 
     run_crawler(start_url, max_depth, output_dir)
+
+
+# Alias for backward compatibility
+DatasetCrawler = ProfessionalCrawler
