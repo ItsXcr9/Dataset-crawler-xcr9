@@ -37,16 +37,35 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Build all Docker images
-      run: |
-        # Build crawler
-        docker build -f docker/Dockerfile.crawler -t crawler:integration .
+    - name: Build crawler image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile.crawler
+        push: false
+        tags: crawler:integration
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-        # Build processor
-        docker build -f docker/Dockerfile.processor -t processor:integration .
+    - name: Build processor image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile.processor
+        push: false
+        tags: processor:integration
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-        # Build API
-        docker build -f docker/Dockerfile.api -t api:integration .
+    - name: Build API image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile.api
+        push: false
+        tags: api:integration
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
     - name: Create test network
       run: docker network create test-network

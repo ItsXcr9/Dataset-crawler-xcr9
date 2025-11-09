@@ -13,13 +13,17 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy requirements and install
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip cache purge && \
+    rm -rf /tmp/* /var/tmp/* /root/.cache/pip
 
 # Additional API dependencies
 RUN pip install --no-cache-dir \
     fastapi==0.104.1 \
     uvicorn==0.24.0 \
-    python-multipart==0.0.6
+    python-multipart==0.0.6 && \
+    pip cache purge && \
+    rm -rf /tmp/* /var/tmp/* /root/.cache/pip
 
 # Create app directory
 WORKDIR /app

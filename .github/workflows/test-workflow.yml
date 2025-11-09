@@ -16,7 +16,6 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Validate YAML syntax
-      uses: actions/checkout@v4
       run: |
         echo "Validating workflow YAML files..."
         for file in .github/workflows/*.yml; do

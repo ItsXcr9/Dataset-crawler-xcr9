@@ -43,9 +43,12 @@ jobs:
           context: .
           file: ./docker/Dockerfile.processor
           push: false
-          load: true
+          outputs: type=docker,dest=/tmp/processor-image.tar
           tags: processor:training-test
           cache-from: type=gha
+
+      - name: Load Docker image
+        run: docker load -i /tmp/processor-image.tar
 
       - name: Set up Python for dataset creation
         uses: actions/setup-python@v4

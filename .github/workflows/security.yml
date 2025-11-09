@@ -90,6 +90,12 @@ jobs:
         docker build -f docker/Dockerfile.api -t api:security-scan . || echo "API image build failed"
       continue-on-error: true  # Continue even if some images fail to build
 
+    - name: Clean up Docker build cache
+      if: always()
+      run: |
+        docker builder prune -af --filter "until=1h" || true
+        docker system prune -f || true
+
     - name: Scan crawler image
       uses: aquasecurity/trivy-action@master
       continue-on-error: true
@@ -165,6 +171,14 @@ jobs:
           fi
         done
 
+    - name: Clean up Docker images and system
+      if: always()
+      run: |
+        echo "Cleaning up Docker images and system..."
+        docker rmi crawler:security-scan processor:security-scan api:security-scan 2>/dev/null || true
+        docker system prune -af --volumes || true
+        df -h
+
   code-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -182,6 +196,8 @@ jobs:
           libssl-dev \
           build-essential \
           python3-dev
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -203,6 +219,8 @@ jobs:
         pip install --no-cache-dir -r requirements.txt || echo "Some requirements failed to install"
         echo "Installing dev dependencies..."
         pip install --no-cache-dir flake8 black isort mypy || echo "Some dev dependencies failed to install"
+        pip cache purge || true
+        rm -rf /tmp/* /var/tmp/* ~/.cache/pip 2>/dev/null || true
       timeout-minutes: 20
       continue-on-error: true  # Continue even if some dependencies fail
 
@@ -244,6 +262,8 @@ jobs:
           libssl-dev \
           build-essential \
           python3-dev
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -251,7 +271,9 @@ jobs:
         python-version: '3.12'
 
     - name: Install pip-tools for dependency management
-      run: pip install pip-tools
+      run: |
+        pip install pip-tools
+        pip cache purge || true
 
     - name: Check if requirements.txt is up to date
       run: |
