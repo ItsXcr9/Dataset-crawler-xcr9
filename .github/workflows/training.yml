@@ -4,27 +4,27 @@ on:
   workflow_dispatch:
     inputs:
       model:
-        description: 'Model to test'
+        description: "Model to test"
         required: false
-        default: 'microsoft/phi-2'
+        default: "microsoft/phi-2"
         type: choice
         options:
-        - microsoft/phi-2
-        - distilgpt2
-        - microsoft/DialoGPT-small
+          - microsoft/phi-2
+          - distilgpt2
+          - microsoft/DialoGPT-small
       epochs:
-        description: 'Number of epochs'
+        description: "Number of epochs"
         required: false
-        default: '1'
+        default: "1"
         type: string
       batch_size:
-        description: 'Batch size'
+        description: "Batch size"
         required: false
-        default: '2'
+        default: "2"
         type: string
   schedule:
     # Run weekly on Sundays at 2 AM UTC
-    - cron: '0 2 * * 0'
+    - cron: "0 2 * * 0"
 
 jobs:
   training-test:
@@ -32,169 +32,170 @@ jobs:
     timeout-minutes: 120
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Build processor image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./docker/Dockerfile.processor
-        push: false
-        tags: processor:training-test
-        cache-from: type=gha
+      - name: Build processor image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.processor
+          push: false
+          load: true
+          tags: processor:training-test
+          cache-from: type=gha
 
-    - name: Set up Python for dataset creation
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python for dataset creation
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyarrow pandas numpy
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarrow pandas numpy
 
-    - name: Create test dataset
-      run: |
-        mkdir -p dataset/shards/train dataset/shards/val models
+      - name: Create test dataset
+        run: |
+          mkdir -p dataset/shards/train dataset/shards/val models
 
-        # Create synthetic training data
-        cat > create_dataset.py << 'EOF'
-        import pyarrow as pa
-        import pandas as pd
-        import numpy as np
+          # Create synthetic training data
+          cat > create_dataset.py << 'EOF'
+          import pyarrow as pa
+          import pandas as pd
+          import numpy as np
 
-        # Generate synthetic tokens (simulating text data)
-        np.random.seed(42)
+          # Generate synthetic tokens (simulating text data)
+          np.random.seed(42)
 
-        # Create 50 samples for training
-        train_data = []
-        for i in range(50):
-            # Simulate token sequences (like GPT would see)
-            length = np.random.randint(50, 200)  # Variable length
-            tokens = np.random.randint(100, 50000, size=length).tolist()
-            attention_mask = [1] * length
+          # Create 50 samples for training
+          train_data = []
+          for i in range(50):
+              # Simulate token sequences (like GPT would see)
+              length = np.random.randint(50, 200)  # Variable length
+              tokens = np.random.randint(100, 50000, size=length).tolist()
+              attention_mask = [1] * length
 
-            train_data.append({
-                'doc_id': f'train_{i}',
-                'tokens': tokens,
-                'attention_mask': attention_mask,
-                'language': 'en',
-                'quality_score': 0.8 + np.random.random() * 0.2,
-                'token_count': length
-            })
+              train_data.append({
+                  'doc_id': f'train_{i}',
+                  'tokens': tokens,
+                  'attention_mask': attention_mask,
+                  'language': 'en',
+                  'quality_score': 0.8 + np.random.random() * 0.2,
+                  'token_count': length
+              })
 
-        # Create 10 samples for validation
-        val_data = []
-        for i in range(10):
-            length = np.random.randint(50, 200)
-            tokens = np.random.randint(100, 50000, size=length).tolist()
-            attention_mask = [1] * length
+          # Create 10 samples for validation
+          val_data = []
+          for i in range(10):
+              length = np.random.randint(50, 200)
+              tokens = np.random.randint(100, 50000, size=length).tolist()
+              attention_mask = [1] * length
 
-            val_data.append({
-                'doc_id': f'val_{i}',
-                'tokens': tokens,
-                'attention_mask': attention_mask,
-                'language': 'en',
-                'quality_score': 0.8 + np.random.random() * 0.2,
-                'token_count': length
-            })
+              val_data.append({
+                  'doc_id': f'val_{i}',
+                  'tokens': tokens,
+                  'attention_mask': attention_mask,
+                  'language': 'en',
+                  'quality_score': 0.8 + np.random.random() * 0.2,
+                  'token_count': length
+              })
 
-        # Save as parquet
-        train_df = pd.DataFrame(train_data)
-        val_df = pd.DataFrame(val_data)
+          # Save as parquet
+          train_df = pd.DataFrame(train_data)
+          val_df = pd.DataFrame(val_data)
 
-        train_table = pa.Table.from_pandas(train_df)
-        val_table = pa.Table.from_pandas(val_df)
+          train_table = pa.Table.from_pandas(train_df)
+          val_table = pa.Table.from_pandas(val_df)
 
-        train_table.to_pandas().to_parquet('dataset/shards/train/synthetic_train.parquet')
-        val_table.to_pandas().to_parquet('dataset/shards/val/synthetic_val.parquet')
+          train_table.to_pandas().to_parquet('dataset/shards/train/synthetic_train.parquet')
+          val_table.to_pandas().to_parquet('dataset/shards/val/synthetic_val.parquet')
 
-        print('Synthetic training dataset created')
-        print(f'Train samples: {len(train_data)}')
-        print(f'Val samples: {len(val_data)}')
-        EOF
+          print('Synthetic training dataset created')
+          print(f'Train samples: {len(train_data)}')
+          print(f'Val samples: {len(val_data)}')
+          EOF
 
-        python3 create_dataset.py
+          python3 create_dataset.py
 
-    - name: Run training test
-      run: |
-        MODEL_NAME="${{ inputs.model || 'microsoft/phi-2' }}"
-        EPOCHS="${{ inputs.epochs || '1' }}"
-        BATCH_SIZE="${{ inputs.batch_size || '2' }}"
+      - name: Run training test
+        run: |
+          MODEL_NAME="${{ inputs.model || 'microsoft/phi-2' }}"
+          EPOCHS="${{ inputs.epochs || '1' }}"
+          BATCH_SIZE="${{ inputs.batch_size || '2' }}"
 
-        echo "Training configuration:"
-        echo "  Model: $MODEL_NAME"
-        echo "  Epochs: $EPOCHS"
-        echo "  Batch size: $BATCH_SIZE"
+          echo "Training configuration:"
+          echo "  Model: $MODEL_NAME"
+          echo "  Epochs: $EPOCHS"
+          echo "  Batch size: $BATCH_SIZE"
 
-        # Create test script with environment variables
-        cat > test_training_env.py << 'EOF'
-        import sys
-        sys.path.insert(0, '/app')
-        from trainer.model_trainer import train_model
-        import os
+          # Create test script with environment variables
+          cat > test_training_env.py << 'EOF'
+          import sys
+          sys.path.insert(0, '/app')
+          from trainer.model_trainer import train_model
+          import os
 
-        model_name = os.environ['MODEL_NAME']
-        epochs = int(os.environ['EPOCHS'])
-        batch_size = int(os.environ['BATCH_SIZE'])
+          model_name = os.environ['MODEL_NAME']
+          epochs = int(os.environ['EPOCHS'])
+          batch_size = int(os.environ['BATCH_SIZE'])
 
-        print(f'Starting training with {model_name}')
+          print(f'Starting training with {model_name}')
 
-        try:
-            train_model(
-                model_name=model_name,
-                train_dir='dataset/shards/train',
-                val_dir='dataset/shards/val',
-                output_dir='models/training_test_output',
-                epochs=epochs,
-                batch_size=batch_size,
-                learning_rate=5e-5,
-                max_length=512,
-                save_steps=50,
-                eval_steps=50,
-                logging_steps=10,
-                fp16=False  # Disable FP16 for CPU training
-            )
-            print('✅ Training completed successfully!')
-        except Exception as e:
-            print(f'❌ Training failed: {e}')
-            import traceback
-            traceback.print_exc()
-            exit(1)
-        EOF
+          try:
+              train_model(
+                  model_name=model_name,
+                  train_dir='dataset/shards/train',
+                  val_dir='dataset/shards/val',
+                  output_dir='models/training_test_output',
+                  epochs=epochs,
+                  batch_size=batch_size,
+                  learning_rate=5e-5,
+                  max_length=512,
+                  save_steps=50,
+                  eval_steps=50,
+                  logging_steps=10,
+                  fp16=False  # Disable FP16 for CPU training
+              )
+              print('✅ Training completed successfully!')
+          except Exception as e:
+              print(f'❌ Training failed: {e}')
+              import traceback
+              traceback.print_exc()
+              exit(1)
+          EOF
 
-        docker run --rm \
-          -v $(pwd)/dataset:/app/dataset \
-          -v $(pwd)/models:/app/models \
-          -v $(pwd)/test_training_env.py:/app/test_training_env.py \
-          -e MODEL_NAME="${MODEL_NAME}" \
-          -e EPOCHS="${EPOCHS}" \
-          -e BATCH_SIZE="${BATCH_SIZE}" \
-          processor:training-test \
-          python3 test_training_env.py
-      env:
-        MODEL_NAME: ${{ inputs.model || 'microsoft/phi-2' }}
-        EPOCHS: ${{ inputs.epochs || '1' }}
-        BATCH_SIZE: ${{ inputs.batch_size || '2' }}
+          docker run --rm \
+            -v $(pwd)/dataset:/app/dataset \
+            -v $(pwd)/models:/app/models \
+            -v $(pwd)/test_training_env.py:/app/test_training_env.py \
+            -e MODEL_NAME="${MODEL_NAME}" \
+            -e EPOCHS="${EPOCHS}" \
+            -e BATCH_SIZE="${BATCH_SIZE}" \
+            processor:training-test \
+            python3 test_training_env.py
+        env:
+          MODEL_NAME: ${{ inputs.model || 'microsoft/phi-2' }}
+          EPOCHS: ${{ inputs.epochs || '1' }}
+          BATCH_SIZE: ${{ inputs.batch_size || '2' }}
 
-    - name: Test trained model inference
-      run: |
-        docker run --rm \
-          -v $(pwd)/models:/app/models \
-          processor:training-test \
-          python3 test_model.py models/training_test_output \
-            --prompt "The future of AI is" \
-            --max_length 50
-      continue-on-error: true  # Inference may fail if model training didn't complete
+      - name: Test trained model inference
+        run: |
+          docker run --rm \
+            -v $(pwd)/models:/app/models \
+            processor:training-test \
+            python3 test_model.py models/training_test_output \
+              --prompt "The future of AI is" \
+              --max_length 50
+        continue-on-error: true # Inference may fail if model training didn't complete
 
-    - name: Upload training artifacts
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: training-test-results
-        path: |
-          models/training_test_output/
-          dataset/shards/
+      - name: Upload training artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-test-results
+          path: |
+            models/training_test_output/
+            dataset/shards/
