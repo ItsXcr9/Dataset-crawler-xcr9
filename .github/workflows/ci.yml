@@ -226,18 +226,44 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Free disk space
+      run: |
+        echo "Disk space before cleanup:"
+        df -h
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        docker system prune -af --volumes || true
+        docker builder prune -af || true
+        echo "Disk space after cleanup:"
+        df -h
+
     - name: Download Docker images
       uses: actions/download-artifact@v4
       with:
         name: docker-images
         path: /tmp
 
-    - name: Load Docker images
+    - name: Load Docker images (one at a time with cleanup)
       run: |
-        docker load -i /tmp/crawler-test.tar
-        docker load -i /tmp/processor-test.tar
-        docker load -i /tmp/api-test.tar
-        docker load -i /tmp/webui-test.tar
+        echo "Loading crawler image..."
+        docker load -i /tmp/crawler-test.tar && rm -f /tmp/crawler-test.tar
+        docker images | grep crawler
+        
+        echo "Loading processor image..."
+        docker load -i /tmp/processor-test.tar && rm -f /tmp/processor-test.tar
+        docker images | grep processor
+        
+        echo "Loading API image..."
+        docker load -i /tmp/api-test.tar && rm -f /tmp/api-test.tar
+        docker images | grep api
+        
+        echo "Loading WebUI image..."
+        docker load -i /tmp/webui-test.tar && rm -f /tmp/webui-test.tar
+        docker images | grep webui
+        
+        echo "All images loaded:"
         docker images
 
   quick-training-test:
@@ -251,6 +277,19 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Free disk space
+      run: |
+        echo "Disk space before cleanup:"
+        df -h
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        docker system prune -af --volumes || true
+        docker builder prune -af || true
+        echo "Disk space after cleanup:"
+        df -h
+
     - name: Download Docker images
       uses: actions/download-artifact@v4
       with:
@@ -260,6 +299,8 @@ jobs:
     - name: Load processor image
       run: |
         docker load -i /tmp/processor-test.tar
+        rm -f /tmp/processor-test.tar
+        docker images | grep processor
 
     - name: Create test dataset directory
       run: |
@@ -384,6 +425,19 @@ jobs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "tag=$VERSION" >> $GITHUB_OUTPUT
 
+    - name: Free disk space
+      run: |
+        echo "Disk space before cleanup:"
+        df -h
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        docker system prune -af --volumes || true
+        docker builder prune -af || true
+        echo "Disk space after cleanup:"
+        df -h
+
     - name: Download Docker images
       uses: actions/download-artifact@v4
       with:
@@ -392,10 +446,11 @@ jobs:
 
     - name: Load and tag images for registry
       run: |
-        docker load -i /tmp/crawler-test.tar
-        docker load -i /tmp/processor-test.tar
-        docker load -i /tmp/api-test.tar
-        docker load -i /tmp/webui-test.tar
+        echo "Loading images one at a time..."
+        docker load -i /tmp/crawler-test.tar && rm -f /tmp/crawler-test.tar
+        docker load -i /tmp/processor-test.tar && rm -f /tmp/processor-test.tar
+        docker load -i /tmp/api-test.tar && rm -f /tmp/api-test.tar
+        docker load -i /tmp/webui-test.tar && rm -f /tmp/webui-test.tar
         
         docker tag crawler:test ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/crawler:${{ steps.meta.outputs.version }}
         docker tag crawler:test ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/crawler:latest
