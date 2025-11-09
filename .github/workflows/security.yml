@@ -2,306 +2,198 @@ name: Security & Quality
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   schedule:
     # Run security checks weekly
-    - cron: '0 1 * * 0'
+    - cron: "0 1 * * 0"
 
 jobs:
   security-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      security-events: write  # Required for SARIF upload
+      security-events: write # Required for SARIF upload
       actions: read
       contents: read
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      continue-on-error: true  # Continue even if vulnerabilities found
-      with:
-        scan-type: 'fs'
-        scan-ref: '.'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        exit-code: '0'  # Don't fail on vulnerabilities found
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true # Continue even if vulnerabilities found
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
+          exit-code: "0" # Don't fail on vulnerabilities found
 
-    - name: Check if SARIF file exists
-      id: check_sarif
-      if: always()
-      run: |
-        if [ -f "trivy-results.sarif" ]; then
-          echo "exists=true" >> $GITHUB_OUTPUT
-        else
-          echo "exists=false" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always() && steps.check_sarif.outputs.exists == 'true'
-      continue-on-error: true  # Continue even if upload fails
-      with:
-        sarif_file: 'trivy-results.sarif'
-        category: 'trivy-filesystem'
-
-    - name: Display Trivy results (fallback)
-      if: always()
-      run: |
-        if [ -f "trivy-results.sarif" ]; then
-          echo "Trivy filesystem scan completed. SARIF results available for manual review."
-          echo "Note: SARIF upload may fail if security features are not enabled for this repository."
-        else
-          echo "Trivy scan did not generate results file."
-        fi
-
-    - name: Run safety check for Python dependencies
-      run: |
-        pip install safety || echo "Safety installation failed, continuing..."
-        safety check --full-report || echo "Safety check found issues (see report above)"
-      continue-on-error: true  # Continue even if vulnerabilities found
-
-    - name: Check for secrets in code
-      uses: gitleaks/gitleaks-action@v2
-      continue-on-error: true  # Continue even if secrets scan fails
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  docker-security:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      security-events: write  # Required for SARIF upload
-      actions: read
-      contents: read
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Build Docker images for scanning
-      run: |
-        echo "Building Docker images for security scanning..."
-        docker build -f docker/Dockerfile.crawler -t crawler:security-scan . || echo "Crawler image build failed"
-        docker build -f docker/Dockerfile.processor -t processor:security-scan . || echo "Processor image build failed"
-        docker build -f docker/Dockerfile.api -t api:security-scan . || echo "API image build failed"
-      continue-on-error: true  # Continue even if some images fail to build
-
-    - name: Clean up Docker build cache
-      if: always()
-      run: |
-        docker builder prune -af --filter "until=1h" || true
-        docker system prune -f || true
-
-    - name: Scan crawler image
-      uses: aquasecurity/trivy-action@master
-      continue-on-error: true
-      with:
-        scan-type: 'image'
-        scan-ref: 'crawler:security-scan'
-        format: 'sarif'
-        output: 'crawler-trivy-results.sarif'
-        exit-code: '0'  # Don't fail on vulnerabilities found
-
-    - name: Scan processor image
-      uses: aquasecurity/trivy-action@master
-      continue-on-error: true
-      with:
-        scan-type: 'image'
-        scan-ref: 'processor:security-scan'
-        format: 'sarif'
-        output: 'processor-trivy-results.sarif'
-        exit-code: '0'  # Don't fail on vulnerabilities found
-
-    - name: Scan API image
-      uses: aquasecurity/trivy-action@master
-      continue-on-error: true
-      with:
-        scan-type: 'image'
-        scan-ref: 'api:security-scan'
-        format: 'sarif'
-        output: 'api-trivy-results.sarif'
-        exit-code: '0'  # Don't fail on vulnerabilities found
-
-    - name: Check if Docker SARIF files exist
-      id: check_docker_sarif
-      if: always()
-      run: |
-        echo "crawler_exists=$([ -f "crawler-trivy-results.sarif" ] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
-        echo "processor_exists=$([ -f "processor-trivy-results.sarif" ] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
-        echo "api_exists=$([ -f "api-trivy-results.sarif" ] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
-
-    - name: Upload crawler image scan results
-      uses: github/codeql-action/upload-sarif@v3
-      if: always() && steps.check_docker_sarif.outputs.crawler_exists == 'true'
-      continue-on-error: true
-      with:
-        sarif_file: 'crawler-trivy-results.sarif'
-        category: 'trivy-crawler-image'
-
-    - name: Upload processor image scan results
-      uses: github/codeql-action/upload-sarif@v3
-      if: always() && steps.check_docker_sarif.outputs.processor_exists == 'true'
-      continue-on-error: true
-      with:
-        sarif_file: 'processor-trivy-results.sarif'
-        category: 'trivy-processor-image'
-
-    - name: Upload API image scan results
-      uses: github/codeql-action/upload-sarif@v3
-      if: always() && steps.check_docker_sarif.outputs.api_exists == 'true'
-      continue-on-error: true
-      with:
-        sarif_file: 'api-trivy-results.sarif'
-        category: 'trivy-api-image'
-
-    - name: Display Docker scan results (fallback)
-      if: always()
-      run: |
-        echo "Docker image security scans completed."
-        echo "Note: SARIF upload may fail if security features are not enabled for this repository."
-        for sarif_file in crawler-trivy-results.sarif processor-trivy-results.sarif api-trivy-results.sarif; do
-          if [ -f "$sarif_file" ]; then
-            echo "✓ $sarif_file generated successfully"
+      - name: Check if SARIF file exists
+        id: check_sarif
+        if: always()
+        run: |
+          if [ -f "trivy-results.sarif" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "✗ $sarif_file not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
-        done
 
-    - name: Clean up Docker images and system
-      if: always()
-      run: |
-        echo "Cleaning up Docker images and system..."
-        docker rmi crawler:security-scan processor:security-scan api:security-scan 2>/dev/null || true
-        docker system prune -af --volumes || true
-        df -h
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && steps.check_sarif.outputs.exists == 'true'
+        continue-on-error: true # Continue even if upload fails
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-filesystem"
+
+      - name: Display Trivy results (fallback)
+        if: always()
+        run: |
+          if [ -f "trivy-results.sarif" ]; then
+            echo "Trivy filesystem scan completed. SARIF results available for manual review."
+            echo "Note: SARIF upload may fail if security features are not enabled for this repository."
+          else
+            echo "Trivy scan did not generate results file."
+          fi
+
+      - name: Run safety check for Python dependencies
+        run: |
+          pip install safety || echo "Safety installation failed, continuing..."
+          safety check --full-report || echo "Safety check found issues (see report above)"
+        continue-on-error: true # Continue even if vulnerabilities found
+
+      - name: Check for secrets in code
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true # Continue even if secrets scan fails
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   code-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libxml2-dev \
-          libxslt1-dev \
-          libffi-dev \
-          libssl-dev \
-          build-essential \
-          python3-dev
-        sudo apt-get clean
-        sudo rm -rf /var/lib/apt/lists/*
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxml2-dev \
+            libxslt1-dev \
+            libffi-dev \
+            libssl-dev \
+            build-essential \
+            python3-dev
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-    - name: Cache pip packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-3.12-${{ hashFiles('requirements*.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-3.12-
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-3.12-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-3.12-
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip setuptools wheel
-        echo "Installing requirements.txt..."
-        pip install --no-cache-dir -r requirements.txt || echo "Some requirements failed to install"
-        echo "Installing dev dependencies..."
-        pip install --no-cache-dir flake8 black isort mypy || echo "Some dev dependencies failed to install"
-        pip cache purge || true
-        rm -rf /tmp/* /var/tmp/* ~/.cache/pip 2>/dev/null || true
-      timeout-minutes: 20
-      continue-on-error: true  # Continue even if some dependencies fail
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          echo "Installing requirements.txt..."
+          pip install --no-cache-dir -r requirements.txt || echo "Some requirements failed to install"
+          echo "Installing dev dependencies..."
+          pip install --no-cache-dir flake8 black isort mypy || echo "Some dev dependencies failed to install"
+          pip cache purge || true
+          rm -rf /tmp/* /var/tmp/* ~/.cache/pip 2>/dev/null || true
+        timeout-minutes: 20
+        continue-on-error: true # Continue even if some dependencies fail
 
-    - name: Run flake8 linting
-      run: |
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || echo "Critical errors found"
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || echo "Style warnings found"
-      continue-on-error: true  # Don't fail on linting issues
+      - name: Run flake8 linting
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || echo "Critical errors found"
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || echo "Style warnings found"
+        continue-on-error: true # Don't fail on linting issues
 
-    - name: Check code formatting with black
-      run: |
-        black --check --diff . || echo "Code formatting issues found (see diff above)"
-      continue-on-error: true  # Don't fail on formatting issues
+      - name: Check code formatting with black
+        run: |
+          black --check --diff . || echo "Code formatting issues found (see diff above)"
+        continue-on-error: true # Don't fail on formatting issues
 
-    - name: Check import sorting with isort
-      run: |
-        isort --check-only --diff . || echo "Import sorting issues found (see diff above)"
-      continue-on-error: true  # Don't fail on import sorting issues
+      - name: Check import sorting with isort
+        run: |
+          isort --check-only --diff . || echo "Import sorting issues found (see diff above)"
+        continue-on-error: true # Don't fail on import sorting issues
 
-    - name: Run mypy type checking
-      run: |
-        mypy crawler/ processor/ trainer/ api/ --ignore-missing-imports
-      continue-on-error: true  # Mypy might have issues with some dependencies
+      - name: Run mypy type checking
+        run: |
+          mypy crawler/ processor/ trainer/ api/ --ignore-missing-imports
+        continue-on-error: true # Mypy might have issues with some dependencies
 
   dependency-check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libxml2-dev \
-          libxslt1-dev \
-          libffi-dev \
-          libssl-dev \
-          build-essential \
-          python3-dev
-        sudo apt-get clean
-        sudo rm -rf /var/lib/apt/lists/*
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxml2-dev \
+            libxslt1-dev \
+            libffi-dev \
+            libssl-dev \
+            build-essential \
+            python3-dev
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-    - name: Install pip-tools for dependency management
-      run: |
-        pip install pip-tools
-        pip cache purge || true
+      - name: Install pip-tools for dependency management
+        run: |
+          pip install pip-tools
+          pip cache purge || true
 
-    - name: Check if requirements.txt is up to date
-      run: |
-        if [ -f "requirements.in" ]; then
-          pip-compile --dry-run --quiet requirements.in || echo "requirements.txt may be outdated"
-        else
-          echo "requirements.in not found, skipping pip-compile check"
-        fi
+      - name: Check if requirements.txt is up to date
+        run: |
+          if [ -f "requirements.in" ]; then
+            pip-compile --dry-run --quiet requirements.in || echo "requirements.txt may be outdated"
+          else
+            echo "requirements.in not found, skipping pip-compile check"
+          fi
 
-    - name: Check for outdated dependencies
-      run: |
-        pip install pip-outdated || true
-        pip list --outdated --format=json | jq '.[] | select(.latest_version != .version) | "\(.name): \(.version) -> \(.latest_version)"' 2>/dev/null || echo "Could not check for outdated dependencies (jq not available)"
+      - name: Check for outdated dependencies
+        run: |
+          pip install pip-outdated || true
+          pip list --outdated --format=json | jq '.[] | select(.latest_version != .version) | "\(.name): \(.version) -> \(.latest_version)"' 2>/dev/null || echo "Could not check for outdated dependencies (jq not available)"
 
-    - name: Security scan summary
-      if: always()
-      run: |
-        echo "## 🔒 Security & Quality Check Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### ✅ Completed Checks:" >> $GITHUB_STEP_SUMMARY
-        echo "- Trivy filesystem vulnerability scan" >> $GITHUB_STEP_SUMMARY
-        echo "- Python dependency safety check" >> $GITHUB_STEP_SUMMARY
-        echo "- Secrets scanning with Gitleaks" >> $GITHUB_STEP_SUMMARY
-        echo "- Docker image vulnerability scans" >> $GITHUB_STEP_SUMMARY
-        echo "- Code quality checks (linting, formatting)" >> $GITHUB_STEP_SUMMARY
-        echo "- Dependency freshness checks" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📝 Notes:" >> $GITHUB_STEP_SUMMARY
-        echo "- SARIF upload may fail if repository security features are not enabled" >> $GITHUB_STEP_SUMMARY
-        echo "- All scan results are available in workflow artifacts" >> $GITHUB_STEP_SUMMARY
-        echo "- Manual review of SARIF files recommended if upload fails" >> $GITHUB_STEP_SUMMARY
+      - name: Security scan summary
+        if: always()
+        run: |
+          echo "## 🔒 Security & Quality Check Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Completed Checks:" >> $GITHUB_STEP_SUMMARY
+          echo "- Trivy filesystem vulnerability scan" >> $GITHUB_STEP_SUMMARY
+          echo "- Python dependency safety check" >> $GITHUB_STEP_SUMMARY
+          echo "- Secrets scanning with Gitleaks" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker image vulnerability scans" >> $GITHUB_STEP_SUMMARY
+          echo "- Code quality checks (linting, formatting)" >> $GITHUB_STEP_SUMMARY
+          echo "- Dependency freshness checks" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Notes:" >> $GITHUB_STEP_SUMMARY
+          echo "- SARIF upload may fail if repository security features are not enabled" >> $GITHUB_STEP_SUMMARY
+          echo "- All scan results are available in workflow artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Manual review of SARIF files recommended if upload fails" >> $GITHUB_STEP_SUMMARY
