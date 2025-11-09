@@ -7,8 +7,9 @@ WORKDIR /app
 # Copy package files
 COPY webui/package*.json ./
 
-# Install dependencies
-RUN npm install --production
+# Install dependencies with cache mount
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --production
 
 # Copy source code
 COPY webui/ ./

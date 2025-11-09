@@ -140,6 +140,10 @@ jobs:
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+      with:
+        driver-opts: |
+          image=moby/buildkit:latest
+          network=host
 
     - name: Clean up Docker before build
       run: |
@@ -305,6 +309,7 @@ jobs:
     - name: Create test dataset directory
       run: |
         mkdir -p dataset/shards/train dataset/shards/val models
+        chmod -R 777 models dataset
 
     - name: Set up Python for dataset creation
       uses: actions/setup-python@v4
@@ -381,21 +386,26 @@ jobs:
           -v $(pwd)/dataset:/app/dataset \
           -v $(pwd)/models:/app/models \
           -v $(pwd)/test_training.py:/app/test_training.py \
+          --user root \
           processor:test \
-          python3 test_training.py
+          sh -c "mkdir -p /app/models/test_model && chown -R processor:processor /app/models /app/dataset && su -s /bin/bash processor -c 'python3 /app/test_training.py'"
 
     - name: Test model inference
       run: |
         docker run --rm \
           -v $(pwd)/models:/app/models \
+          --user root \
           processor:test \
-          python3 test_model.py models/test_model --prompt "Hello" --max_length 20
+          sh -c "chown -R processor:processor /app/models && su -s /bin/bash processor -c 'python3 test_model.py models/test_model --prompt \"Hello\" --max_length 20'"
       continue-on-error: true  # Inference test may fail if training didn't complete
 
   push-to-registry:
     runs-on: ubuntu-latest
     needs: [test, docker-build, docker-tests, quick-training-test]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    # Push to registry on successful builds to main/develop, or on workflow_dispatch
+    if: |
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
+      github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       packages: write
@@ -410,6 +420,10 @@ jobs:
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+      with:
+        driver-opts: |
+          image=moby/buildkit:latest
+          network=host
 
     - name: Log in to Container Registry
       uses: docker/login-action@v3
@@ -477,5 +491,16 @@ jobs:
 
     - name: Summary
       run: |
-        echo "✅ All images pushed to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-        echo "Version: ${{ steps.meta.outputs.version }}"
+        echo "✅ All images pushed to GitHub Container Registry"
+        echo ""
+        echo "📦 Image locations:"
+        echo "  - Crawler:   ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/crawler:${{ steps.meta.outputs.version }}"
+        echo "  - Processor: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/processor:${{ steps.meta.outputs.version }}"
+        echo "  - API:       ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api:${{ steps.meta.outputs.version }}"
+        echo "  - WebUI:     ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/webui:${{ steps.meta.outputs.version }}"
+        echo ""
+        echo "🔗 View packages: https://github.com/${{ github.repository }}/pkgs/container"
+        echo "📝 Version: ${{ steps.meta.outputs.version }}"
+        echo ""
+        echo "💡 To pull images:"
+        echo "   docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/crawler:latest"

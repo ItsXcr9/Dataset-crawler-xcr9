@@ -1,8 +1,10 @@
 # API service Dockerfile
 FROM python:3.11-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies with cache mount
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -11,19 +13,14 @@ RUN apt-get update && apt-get install -y \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy requirements and install
+# Copy requirements and install all dependencies in one layer with cache mount
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip cache purge && \
-    rm -rf /tmp/* /var/tmp/* /root/.cache/pip
-
-# Additional API dependencies
-RUN pip install --no-cache-dir \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir \
     fastapi==0.104.1 \
     uvicorn==0.24.0 \
-    python-multipart==0.0.6 && \
-    pip cache purge && \
-    rm -rf /tmp/* /var/tmp/* /root/.cache/pip
+    python-multipart==0.0.6
 
 # Create app directory
 WORKDIR /app
