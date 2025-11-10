@@ -6,6 +6,10 @@ on:
     # Run integration tests weekly
     - cron: '0 3 * * 0'
 
+env:
+  TMPDIR: /var/tmp
+  PIP_CACHE_DIR: /var/tmp/pip-cache
+
 jobs:
   integration-test:
     runs-on: [self-hosted, Linux, X64, xcr9]

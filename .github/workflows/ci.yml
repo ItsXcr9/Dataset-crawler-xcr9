@@ -12,6 +12,10 @@ on:
         type: boolean
         default: true
 
+env:
+  TMPDIR: /var/tmp
+  PIP_CACHE_DIR: /var/tmp/pip-cache
+
 jobs:
   test:
     runs-on: [self-hosted, Linux, X64, xcr9]

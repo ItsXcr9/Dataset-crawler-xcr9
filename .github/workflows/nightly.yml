@@ -3,8 +3,12 @@ name: Nightly Tests
 on:
   schedule:
     # Run nightly at 2 AM UTC
-    - cron: '0 2 * * *'
+    - cron: "0 2 * * *"
   workflow_dispatch:
+
+env:
+  TMPDIR: /var/tmp
+  PIP_CACHE_DIR: /var/tmp/pip-cache
 
 jobs:
   nightly-test:
@@ -15,263 +19,263 @@ jobs:
       IMAGE_NAME: ${{ github.repository }}
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      with:
-        driver-opts: |
-          image=moby/buildkit:latest
-          network=host
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
 
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Pull prebuilt processor image
-      id: pull_prebuilt
-      continue-on-error: true
-      run: |
-        IMAGE_NAME_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
-        IMAGE="${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:latest"
-        echo "Attempting to pull $IMAGE..."
-        docker pull "$IMAGE"
-        docker tag "$IMAGE" processor:nightly
+      - name: Pull prebuilt processor image
+        id: pull_prebuilt
+        continue-on-error: true
+        run: |
+          IMAGE_NAME_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE="${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:latest"
+          echo "Attempting to pull $IMAGE..."
+          docker pull "$IMAGE"
+          docker tag "$IMAGE" processor:nightly
 
-    - name: Build processor image (fallback)
-      if: steps.pull_prebuilt.outcome != 'success'
-      id: build_processor
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./docker/Dockerfile.processor
-        push: false
-        tags: processor:nightly
-        outputs: type=docker,dest=/tmp/processor-nightly.tar
-        cache-from: type=gha,scope=processor
-        cache-to: type=gha,mode=max,scope=processor-nightly
+      - name: Build processor image (fallback)
+        if: steps.pull_prebuilt.outcome != 'success'
+        id: build_processor
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.processor
+          push: false
+          tags: processor:nightly
+          outputs: type=docker,dest=/tmp/processor-nightly.tar
+          cache-from: type=gha,scope=processor
+          cache-to: type=gha,mode=max,scope=processor-nightly
 
-    - name: Load processor image
-      if: steps.pull_prebuilt.outcome != 'success'
-      run: |
-        docker load -i /tmp/processor-nightly.tar
-        rm -f /tmp/processor-nightly.tar
+      - name: Load processor image
+        if: steps.pull_prebuilt.outcome != 'success'
+        run: |
+          docker load -i /tmp/processor-nightly.tar
+          rm -f /tmp/processor-nightly.tar
 
-    - name: Set up Python for dataset creation
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python for dataset creation
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyarrow pandas numpy
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarrow pandas numpy
 
-    - name: Create test environment
-      run: |
-        mkdir -p dataset/shards/train dataset/shards/val models
-        mkdir -p dataset_backups/test_nightly
+      - name: Create test environment
+        run: |
+          mkdir -p dataset/shards/train dataset/shards/val models
+          mkdir -p dataset_backups/test_nightly
 
-    - name: Generate synthetic dataset for nightly test
-      run: |
-        cat > generate_nightly_dataset.py << 'EOF'
-        import pyarrow as pa
-        import pandas as pd
-        import numpy as np
-        from datetime import datetime
+      - name: Generate synthetic dataset for nightly test
+        run: |
+          cat > generate_nightly_dataset.py << 'EOF'
+          import pyarrow as pa
+          import pandas as pd
+          import numpy as np
+          from datetime import datetime
 
-        # Generate more realistic synthetic data for nightly testing
-        np.random.seed(12345)
+          # Generate more realistic synthetic data for nightly testing
+          np.random.seed(12345)
 
-        # Create training data (200 samples)
-        train_samples = []
-        for i in range(200):
-            # Simulate realistic token sequences
-            length = np.random.randint(100, 1000)  # More realistic lengths
-            tokens = np.random.randint(100, 50000, size=length).tolist()
-            attention_mask = [1] * length
+          # Create training data (200 samples)
+          train_samples = []
+          for i in range(200):
+              # Simulate realistic token sequences
+              length = np.random.randint(100, 1000)  # More realistic lengths
+              tokens = np.random.randint(100, 50000, size=length).tolist()
+              attention_mask = [1] * length
 
-            train_samples.append({
-                'doc_id': f'nightly_train_{i}',
-                'tokens': tokens,
-                'attention_mask': attention_mask,
-                'language': 'en',
-                'quality_score': 0.7 + np.random.random() * 0.3,
-                'token_count': length
-            })
+              train_samples.append({
+                  'doc_id': f'nightly_train_{i}',
+                  'tokens': tokens,
+                  'attention_mask': attention_mask,
+                  'language': 'en',
+                  'quality_score': 0.7 + np.random.random() * 0.3,
+                  'token_count': length
+              })
 
-        # Create validation data (50 samples)
-        val_samples = []
-        for i in range(50):
-            length = np.random.randint(100, 1000)
-            tokens = np.random.randint(100, 50000, size=length).tolist()
-            attention_mask = [1] * length
+          # Create validation data (50 samples)
+          val_samples = []
+          for i in range(50):
+              length = np.random.randint(100, 1000)
+              tokens = np.random.randint(100, 50000, size=length).tolist()
+              attention_mask = [1] * length
 
-            val_samples.append({
-                'doc_id': f'nightly_val_{i}',
-                'tokens': tokens,
-                'attention_mask': attention_mask,
-                'language': 'en',
-                'quality_score': 0.7 + np.random.random() * 0.3,
-                'token_count': length
-            })
+              val_samples.append({
+                  'doc_id': f'nightly_val_{i}',
+                  'tokens': tokens,
+                  'attention_mask': attention_mask,
+                  'language': 'en',
+                  'quality_score': 0.7 + np.random.random() * 0.3,
+                  'token_count': length
+              })
 
-        # Save as parquet files
-        train_df = pd.DataFrame(train_samples)
-        val_df = pd.DataFrame(val_samples)
+          # Save as parquet files
+          train_df = pd.DataFrame(train_samples)
+          val_df = pd.DataFrame(val_samples)
 
-        train_df.to_parquet('dataset/shards/train/nightly_train.parquet')
-        val_df.to_parquet('dataset/shards/val/nightly_val.parquet')
+          train_df.to_parquet('dataset/shards/train/nightly_train.parquet')
+          val_df.to_parquet('dataset/shards/val/nightly_val.parquet')
 
-        # Save version info
-        version_info = {
-            'version': 'nightly_test',
-            'created_at': datetime.utcnow().isoformat(),
-            'train_samples': len(train_samples),
-            'val_samples': len(val_samples),
-            'description': 'Synthetic dataset for nightly CI testing'
-        }
+          # Save version info
+          version_info = {
+              'version': 'nightly_test',
+              'created_at': datetime.utcnow().isoformat(),
+              'train_samples': len(train_samples),
+              'val_samples': len(val_samples),
+              'description': 'Synthetic dataset for nightly CI testing'
+          }
 
-        import json
-        with open('dataset_backups/test_nightly/version_info.json', 'w') as f:
-            json.dump(version_info, f, indent=2)
+          import json
+          with open('dataset_backups/test_nightly/version_info.json', 'w') as f:
+              json.dump(version_info, f, indent=2)
 
-        print('Created nightly test dataset:')
-        print(f'  Train samples: {len(train_samples)}')
-        print(f'  Val samples: {len(val_samples)}')
-        print(f'  Total tokens: {sum(len(s["tokens"]) for s in train_samples + val_samples)}')
-        EOF
+          print('Created nightly test dataset:')
+          print(f'  Train samples: {len(train_samples)}')
+          print(f'  Val samples: {len(val_samples)}')
+          print(f'  Total tokens: {sum(len(s["tokens"]) for s in train_samples + val_samples)}')
+          EOF
 
-        python3 generate_nightly_dataset.py
+          python3 generate_nightly_dataset.py
 
-    - name: Run quick training test (DialoGPT)
-      run: |
-        echo "Testing with DialoGPT-small..."
+      - name: Run quick training test (DialoGPT)
+        run: |
+          echo "Testing with DialoGPT-small..."
 
-        # Create test script
-        cat > test_dialogpt.py << 'EOF'
-        import sys
-        sys.path.insert(0, '/app')
-        from trainer.model_trainer import train_model
+          # Create test script
+          cat > test_dialogpt.py << 'EOF'
+          import sys
+          sys.path.insert(0, '/app')
+          from trainer.model_trainer import train_model
 
-        try:
-            train_model(
-                model_name='microsoft/DialoGPT-small',
-                train_dir='dataset/shards/train',
-                val_dir='dataset/shards/val',
-                output_dir='models/nightly_dialogpt',
-                epochs=1,
-                batch_size=2,
-                learning_rate=5e-5,
-                max_length=512,
-                save_steps=100,
-                eval_steps=100,
-                logging_steps=50,
-                fp16=False
-            )
-            print('✅ DialoGPT training completed successfully!')
-        except Exception as e:
-            print(f'❌ DialoGPT training failed: {e}')
-            import traceback
-            traceback.print_exc()
-            exit(1)
-        EOF
+          try:
+              train_model(
+                  model_name='microsoft/DialoGPT-small',
+                  train_dir='dataset/shards/train',
+                  val_dir='dataset/shards/val',
+                  output_dir='models/nightly_dialogpt',
+                  epochs=1,
+                  batch_size=2,
+                  learning_rate=5e-5,
+                  max_length=512,
+                  save_steps=100,
+                  eval_steps=100,
+                  logging_steps=50,
+                  fp16=False
+              )
+              print('✅ DialoGPT training completed successfully!')
+          except Exception as e:
+              print(f'❌ DialoGPT training failed: {e}')
+              import traceback
+              traceback.print_exc()
+              exit(1)
+          EOF
 
-        docker run --rm \
-          -v $(pwd)/dataset:/app/dataset \
-          -v $(pwd)/models:/app/models \
-          -v $(pwd)/test_dialogpt.py:/app/test_dialogpt.py \
-          processor:nightly \
-          python3 test_dialogpt.py
+          docker run --rm \
+            -v $(pwd)/dataset:/app/dataset \
+            -v $(pwd)/models:/app/models \
+            -v $(pwd)/test_dialogpt.py:/app/test_dialogpt.py \
+            processor:nightly \
+            python3 test_dialogpt.py
 
-    - name: Test DialoGPT model inference
-      run: |
-        docker run --rm \
-          -v $(pwd)/models:/app/models \
-          processor:nightly \
-          python3 test_model.py models/nightly_dialogpt \
-            --prompt "Hello, how are you today?" \
-            --max_length 30
-      continue-on-error: true  # Inference may fail if training didn't complete
+      - name: Test DialoGPT model inference
+        run: |
+          docker run --rm \
+            -v $(pwd)/models:/app/models \
+            processor:nightly \
+            python3 test_model.py models/nightly_dialogpt \
+              --prompt "Hello, how are you today?" \
+              --max_length 30
+        continue-on-error: true # Inference may fail if training didn't complete
 
-    - name: Run training test (DistilGPT-2)
-      run: |
-        echo "Testing with DistilGPT-2..."
+      - name: Run training test (DistilGPT-2)
+        run: |
+          echo "Testing with DistilGPT-2..."
 
-        # Create test script
-        cat > test_distilgpt.py << 'EOF'
-        import sys
-        sys.path.insert(0, '/app')
-        from trainer.model_trainer import train_model
+          # Create test script
+          cat > test_distilgpt.py << 'EOF'
+          import sys
+          sys.path.insert(0, '/app')
+          from trainer.model_trainer import train_model
 
-        try:
-            train_model(
-                model_name='distilgpt2',
-                train_dir='dataset/shards/train',
-                val_dir='dataset/shards/val',
-                output_dir='models/nightly_distilgpt2',
-                epochs=1,
-                batch_size=4,
-                learning_rate=5e-5,
-                max_length=512,
-                save_steps=100,
-                eval_steps=100,
-                logging_steps=50,
-                fp16=False
-            )
-            print('✅ DistilGPT-2 training completed successfully!')
-        except Exception as e:
-            print(f'❌ DistilGPT-2 training failed: {e}')
-            import traceback
-            traceback.print_exc()
-            exit(1)
-        EOF
+          try:
+              train_model(
+                  model_name='distilgpt2',
+                  train_dir='dataset/shards/train',
+                  val_dir='dataset/shards/val',
+                  output_dir='models/nightly_distilgpt2',
+                  epochs=1,
+                  batch_size=4,
+                  learning_rate=5e-5,
+                  max_length=512,
+                  save_steps=100,
+                  eval_steps=100,
+                  logging_steps=50,
+                  fp16=False
+              )
+              print('✅ DistilGPT-2 training completed successfully!')
+          except Exception as e:
+              print(f'❌ DistilGPT-2 training failed: {e}')
+              import traceback
+              traceback.print_exc()
+              exit(1)
+          EOF
 
-        docker run --rm \
-          -v $(pwd)/dataset:/app/dataset \
-          -v $(pwd)/models:/app/models \
-          -v $(pwd)/test_distilgpt.py:/app/test_distilgpt.py \
-          processor:nightly \
-          python3 test_distilgpt.py
+          docker run --rm \
+            -v $(pwd)/dataset:/app/dataset \
+            -v $(pwd)/models:/app/models \
+            -v $(pwd)/test_distilgpt.py:/app/test_distilgpt.py \
+            processor:nightly \
+            python3 test_distilgpt.py
 
-    - name: Test DistilGPT-2 model inference
-      run: |
-        docker run --rm \
-          -v $(pwd)/models:/app/models \
-          processor:nightly \
-          python3 test_model.py models/nightly_distilgpt2 \
-            --prompt "The future of artificial intelligence" \
-            --max_length 40
-      continue-on-error: true  # Inference may fail if training didn't complete
+      - name: Test DistilGPT-2 model inference
+        run: |
+          docker run --rm \
+            -v $(pwd)/models:/app/models \
+            processor:nightly \
+            python3 test_model.py models/nightly_distilgpt2 \
+              --prompt "The future of artificial intelligence" \
+              --max_length 40
+        continue-on-error: true # Inference may fail if training didn't complete
 
-    - name: Generate test report
-      run: |
-        echo "# Nightly Training Test Report" > nightly_report.md
-        echo "" >> nightly_report.md
-        echo "Generated on: $(date)" >> nightly_report.md
-        echo "" >> nightly_report.md
+      - name: Generate test report
+        run: |
+          echo "# Nightly Training Test Report" > nightly_report.md
+          echo "" >> nightly_report.md
+          echo "Generated on: $(date)" >> nightly_report.md
+          echo "" >> nightly_report.md
 
-        echo "## Models Tested" >> nightly_report.md
-        echo "- ✅ DialoGPT-small" >> nightly_report.md
-        echo "- ✅ DistilGPT-2" >> nightly_report.md
-        echo "" >> nightly_report.md
+          echo "## Models Tested" >> nightly_report.md
+          echo "- ✅ DialoGPT-small" >> nightly_report.md
+          echo "- ✅ DistilGPT-2" >> nightly_report.md
+          echo "" >> nightly_report.md
 
-        echo "## Dataset Info" >> nightly_report.md
-        echo "- Train samples: $(python3 -c "import pandas as pd; df=pd.read_parquet('dataset/shards/train/nightly_train.parquet'); print(len(df))")" >> nightly_report.md
-        echo "- Val samples: $(python3 -c "import pandas as pd; df=pd.read_parquet('dataset/shards/val/nightly_val.parquet'); print(len(df))")" >> nightly_report.md
-        echo "" >> nightly_report.md
+          echo "## Dataset Info" >> nightly_report.md
+          echo "- Train samples: $(python3 -c "import pandas as pd; df=pd.read_parquet('dataset/shards/train/nightly_train.parquet'); print(len(df))")" >> nightly_report.md
+          echo "- Val samples: $(python3 -c "import pandas as pd; df=pd.read_parquet('dataset/shards/val/nightly_val.parquet'); print(len(df))")" >> nightly_report.md
+          echo "" >> nightly_report.md
 
-        echo "## Test Results" >> nightly_report.md
-        echo "All training tests completed successfully!" >> nightly_report.md
+          echo "## Test Results" >> nightly_report.md
+          echo "All training tests completed successfully!" >> nightly_report.md
 
-    - name: Upload nightly test artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: nightly-test-results-${{ github.run_number }}
-        path: |
-          models/
-          dataset/
-          nightly_report.md
+      - name: Upload nightly test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-test-results-${{ github.run_number }}
+          path: |
+            models/
+            dataset/
+            nightly_report.md

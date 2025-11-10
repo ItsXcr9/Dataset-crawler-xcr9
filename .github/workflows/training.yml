@@ -26,6 +26,10 @@ on:
     # Run weekly on Sundays at 2 AM UTC
     - cron: "0 2 * * 0"
 
+env:
+  TMPDIR: /var/tmp
+  PIP_CACHE_DIR: /var/tmp/pip-cache
+
 jobs:
   training-test:
     runs-on: [self-hosted, Linux, X64, xcr9]
