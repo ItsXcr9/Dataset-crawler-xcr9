@@ -5,6 +5,12 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      push_to_registry:
+        description: "Push images to GitHub Container Registry"
+        type: boolean
+        default: true
 
 jobs:
   test:
@@ -489,7 +495,7 @@ jobs:
     if: |
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
-        github.event_name == 'workflow_dispatch'
+        (github.event_name == 'workflow_dispatch' && inputs.push_to_registry == 'true')
       ) &&
       needs.docker-build.outputs.any-built == 'true'
     permissions:
