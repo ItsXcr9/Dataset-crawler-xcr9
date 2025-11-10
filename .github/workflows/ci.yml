@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 jobs:
   test:
@@ -12,475 +12,486 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        python-version: ['3.12']
+        python-version: ["3.12"]
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libxml2-dev \
-          libxslt1-dev \
-          libffi-dev \
-          libssl-dev \
-          build-essential \
-          python3-dev
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxml2-dev \
+            libxslt1-dev \
+            libffi-dev \
+            libssl-dev \
+            build-essential \
+            python3-dev
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: '${{ matrix.python-version }}'
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: "${{ matrix.python-version }}"
 
-    - name: Cache pip packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('requirements*.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-${{ matrix.python-version }}-
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip setuptools wheel
-        echo "Installing requirements.txt..."
-        pip install -r requirements.txt
-        echo "Installing dev requirements..."
-        pip install -r requirements-dev.txt
-        echo "Verifying critical packages..."
-        python -m pip list | grep -i scrapy && echo "✅ Scrapy installed" || echo "⚠️ Scrapy not found"
-        python -m pip list | grep -i transformers && echo "✅ Transformers installed" || echo "⚠️ Transformers not found"
-        python -m pip list | grep -i torch && echo "✅ PyTorch installed" || echo "⚠️ PyTorch not found"
-        python -m pip list | grep -i datasets && echo "✅ Datasets installed" || echo "⚠️ Datasets not found"
-      timeout-minutes: 20
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          echo "Installing requirements.txt..."
+          pip install -r requirements.txt
+          echo "Installing dev requirements..."
+          pip install -r requirements-dev.txt
+          echo "Verifying critical packages..."
+          python -m pip list | grep -i scrapy && echo "✅ Scrapy installed" || echo "⚠️ Scrapy not found"
+          python -m pip list | grep -i transformers && echo "✅ Transformers installed" || echo "⚠️ Transformers not found"
+          python -m pip list | grep -i torch && echo "✅ PyTorch installed" || echo "⚠️ PyTorch not found"
+          python -m pip list | grep -i datasets && echo "✅ Datasets installed" || echo "⚠️ Datasets not found"
+        timeout-minutes: 20
 
-    - name: Verify Python environment
-      run: |
-        echo "Python version: $(python --version)"
-        echo "Pip version: $(pip --version)"
-        echo "Python path: $(which python)"
+      - name: Verify Python environment
+        run: |
+          echo "Python version: $(python --version)"
+          echo "Pip version: $(pip --version)"
+          echo "Python path: $(which python)"
 
-    - name: Run basic imports test
-      run: |
-        echo "Testing imports..."
-        failed=0
-        python -c "import scrapy; print('✅ Scrapy OK')" || { echo "❌ Scrapy import failed"; failed=1; }
-        python -c "from transformers import AutoTokenizer; print('✅ Transformers OK')" || { echo "❌ Transformers import failed"; failed=1; }
-        python -c "import torch; print('✅ PyTorch OK')" || { echo "❌ PyTorch import failed"; failed=1; }
-        python -c "import datasets; print('✅ Datasets OK')" || { echo "❌ Datasets import failed"; failed=1; }
-        if [ $failed -eq 0 ]; then
-          echo "✅ All imports successful!"
-        else
-          echo "⚠️ Some imports failed, but continuing..."
-          exit 1
-        fi
+      - name: Run basic imports test
+        run: |
+          echo "Testing imports..."
+          failed=0
+          python -c "import scrapy; print('✅ Scrapy OK')" || { echo "❌ Scrapy import failed"; failed=1; }
+          python -c "from transformers import AutoTokenizer; print('✅ Transformers OK')" || { echo "❌ Transformers import failed"; failed=1; }
+          python -c "import torch; print('✅ PyTorch OK')" || { echo "❌ PyTorch import failed"; failed=1; }
+          python -c "import datasets; print('✅ Datasets OK')" || { echo "❌ Datasets import failed"; failed=1; }
+          if [ $failed -eq 0 ]; then
+            echo "✅ All imports successful!"
+          else
+            echo "⚠️ Some imports failed, but continuing..."
+            exit 1
+          fi
 
-    - name: Run unit tests
-      run: |
-        pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing || echo "⚠️ Some tests failed"
-      continue-on-error: true  # Don't fail CI if tests fail initially
+      - name: Run unit tests
+        run: |
+          pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing || echo "⚠️ Some tests failed"
+        continue-on-error: true # Don't fail CI if tests fail initially
 
-    - name: Run crawler tests
-      run: |
-        cd crawler
-        python -c "from crawler import DatasetCrawler; print('Crawler import OK')" || echo "⚠️ Crawler import failed"
-      continue-on-error: true
+      - name: Run crawler tests
+        run: |
+          cd crawler
+          python -c "from crawler import DatasetCrawler; print('Crawler import OK')" || echo "⚠️ Crawler import failed"
+        continue-on-error: true
 
-    - name: Run processor tests
-      run: |
-        cd processor
-        python -c "from data_processor import DataProcessor; print('Processor import OK')" || echo "⚠️ DataProcessor import failed"
-        python -c "from tokenizer_sharder import TokenizerSharder; print('Tokenizer import OK')" || echo "⚠️ TokenizerSharder import failed"
-      continue-on-error: true
+      - name: Run processor tests
+        run: |
+          cd processor
+          python -c "from data_processor import DataProcessor; print('Processor import OK')" || echo "⚠️ DataProcessor import failed"
+          python -c "from tokenizer_sharder import TokenizerSharder; print('Tokenizer import OK')" || echo "⚠️ TokenizerSharder import failed"
+        continue-on-error: true
 
-    - name: Run trainer tests
-      run: |
-        cd trainer
-        python -c "from model_trainer import ParquetDataset, train_model; print('Trainer import OK')" || echo "⚠️ Trainer import failed"
-      continue-on-error: true
+      - name: Run trainer tests
+        run: |
+          cd trainer
+          python -c "from model_trainer import ParquetDataset, train_model; print('Trainer import OK')" || echo "⚠️ Trainer import failed"
+        continue-on-error: true
 
-    - name: Test model loading (small model)
-      run: |
-        python3 -c "
-        from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained('distilgpt2')
-        print('Tokenizer loaded successfully')
-        print(f'Vocab size: {tokenizer.vocab_size}')
-        "
-      continue-on-error: true
+      - name: Test model loading (small model)
+        run: |
+          python3 -c "
+          from transformers import AutoTokenizer
+          tokenizer = AutoTokenizer.from_pretrained('distilgpt2')
+          print('Tokenizer loaded successfully')
+          print(f'Vocab size: {tokenizer.vocab_size}')
+          "
+        continue-on-error: true
 
   docker-build:
     runs-on: ubuntu-latest
     needs: test
     timeout-minutes: 90
     outputs:
-      images-built: ${{ steps.set-output.outputs.images-built }}
+      crawler-built: ${{ steps.build-results.outputs.crawler-built }}
+      processor-built: ${{ steps.build-results.outputs.processor-built }}
+      api-built: ${{ steps.build-results.outputs.api-built }}
+      webui-built: ${{ steps.build-results.outputs.webui-built }}
+      any-built: ${{ steps.build-results.outputs.any-built }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        ref: ${{ github.ref }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
 
-    - name: Free disk space manually
-      run: |
-        echo "Disk space before cleanup:"
-        df -h
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /opt/hostedtoolcache/CodeQL
-        echo "Disk space after cleanup:"
-        df -h
+      - name: Free disk space manually
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          echo "Disk space after cleanup:"
+          df -h
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      with:
-        driver-opts: |
-          image=moby/buildkit:latest
-          network=host
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
 
-    - name: Clean up Docker before build
-      run: |
-        docker system prune -af --volumes || true
-        docker builder prune -af || true
-        echo "Docker disk usage:"
-        docker system df
+      - name: Clean up Docker before build
+        run: |
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          echo "Docker disk usage:"
+          docker system df
 
-    - name: Detect changed files
-      id: changes
-      uses: dorny/paths-filter@v2
-      with:
-        filters: |
-          crawler:
-            - 'crawler/**'
-            - 'common/**'
-            - 'config/**'
-            - 'requirements.txt'
-            - 'docker/Dockerfile.crawler'
-          processor:
-            - 'processor/**'
-            - 'trainer/**'
-            - 'common/**'
-            - 'config/**'
-            - 'requirements.txt'
-            - 'docker/Dockerfile.processor'
-          api:
-            - 'api/**'
-            - 'dataset_manager.py'
-            - 'config/**'
-            - 'requirements.txt'
-            - 'docker/Dockerfile.api'
-          webui:
-            - 'webui/**'
-            - 'docker/Dockerfile.webui'
-            - 'docker/nginx.conf'
-          docker:
-            - 'docker/**'
-            - 'requirements.txt'
-            - 'requirements-dev.txt'
+      - name: Detect changed files
+        id: changes
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            crawler:
+              - 'crawler/**'
+              - 'common/**'
+              - 'config/**'
+              - 'requirements.txt'
+              - 'docker/Dockerfile.crawler'
+            processor:
+              - 'processor/**'
+              - 'trainer/**'
+              - 'common/**'
+              - 'config/**'
+              - 'requirements.txt'
+              - 'docker/Dockerfile.processor'
+            api:
+              - 'api/**'
+              - 'dataset_manager.py'
+              - 'config/**'
+              - 'requirements.txt'
+              - 'docker/Dockerfile.api'
+            webui:
+              - 'webui/**'
+              - 'docker/Dockerfile.webui'
+              - 'docker/nginx.conf'
+            docker:
+              - 'docker/**'
+              - 'requirements.txt'
+              - 'requirements-dev.txt'
 
-    - name: Build crawler Docker image
-      if: steps.changes.outputs.crawler == 'true' || steps.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./docker/Dockerfile.crawler
-        push: false
-        tags: crawler:test
-        outputs: type=docker,dest=/tmp/crawler-test.tar
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build crawler Docker image
+        id: build_crawler
+        if: steps.changes.outputs.crawler == 'true' || steps.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.crawler
+          push: false
+          tags: crawler:test
+          outputs: type=docker,dest=/tmp/crawler-test.tar
+          cache-from: type=gha,scope=crawler
+          cache-to: type=gha,mode=max,scope=crawler
 
-    - name: Build processor Docker image
-      if: steps.changes.outputs.processor == 'true' || steps.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./docker/Dockerfile.processor
-        push: false
-        tags: processor:test
-        outputs: type=docker,dest=/tmp/processor-test.tar
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build processor Docker image
+        id: build_processor
+        if: steps.changes.outputs.processor == 'true' || steps.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.processor
+          push: false
+          tags: processor:test
+          outputs: type=docker,dest=/tmp/processor-test.tar
+          cache-from: type=gha,scope=processor
+          cache-to: type=gha,mode=max,scope=processor
 
-    - name: Build API Docker image
-      if: steps.changes.outputs.api == 'true' || steps.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./docker/Dockerfile.api
-        push: false
-        tags: api:test
-        outputs: type=docker,dest=/tmp/api-test.tar
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build API Docker image
+        id: build_api
+        if: steps.changes.outputs.api == 'true' || steps.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.api
+          push: false
+          tags: api:test
+          outputs: type=docker,dest=/tmp/api-test.tar
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
 
-    - name: Build WebUI Docker image
-      if: steps.changes.outputs.webui == 'true' || steps.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch'
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./docker/Dockerfile.webui
-        push: false
-        tags: webui:test
-        outputs: type=docker,dest=/tmp/webui-test.tar
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build WebUI Docker image
+        id: build_webui
+        if: steps.changes.outputs.webui == 'true' || steps.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.webui
+          push: false
+          tags: webui:test
+          outputs: type=docker,dest=/tmp/webui-test.tar
+          cache-from: type=gha,scope=webui
+          cache-to: type=gha,mode=max,scope=webui
 
-    - name: Create placeholder images for unchanged services
-      run: |
-        # Create placeholder tar files for images that weren't built
-        if [ ! -f /tmp/crawler-test.tar ]; then
-          echo "Skipping crawler (no changes detected)"
-          touch /tmp/crawler-test.tar.skip
-        fi
-        if [ ! -f /tmp/processor-test.tar ]; then
-          echo "Skipping processor (no changes detected)"
-          touch /tmp/processor-test.tar.skip
-        fi
-        if [ ! -f /tmp/api-test.tar ]; then
-          echo "Skipping api (no changes detected)"
-          touch /tmp/api-test.tar.skip
-        fi
-        if [ ! -f /tmp/webui-test.tar ]; then
-          echo "Skipping webui (no changes detected)"
-          touch /tmp/webui-test.tar.skip
-        fi
+      - name: Record build results
+        id: build-results
+        run: |
+          record_result() {
+            local outcome="$1"
+            local name="$2"
+            if [ "$outcome" = "success" ]; then
+              echo "$name=true" >> $GITHUB_OUTPUT
+            else
+              echo "$name=false" >> $GITHUB_OUTPUT
+            fi
+          }
 
-    - name: Save all Docker images as artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: docker-images
-        path: |
-          /tmp/crawler-test.tar
-          /tmp/processor-test.tar
-          /tmp/api-test.tar
-          /tmp/webui-test.tar
-        retention-days: 1
-        if-no-files-found: ignore
+          record_result "${{ steps.build_crawler.outcome }}" "crawler-built"
+          record_result "${{ steps.build_processor.outcome }}" "processor-built"
+          record_result "${{ steps.build_api.outcome }}" "api-built"
+          record_result "${{ steps.build_webui.outcome }}" "webui-built"
 
-    - name: Set output
-      id: set-output
-      run: |
-        echo "images-built=true" >> $GITHUB_OUTPUT
+          if [ "${{ steps.build_crawler.outcome }}" = "success" ] || \
+             [ "${{ steps.build_processor.outcome }}" = "success" ] || \
+             [ "${{ steps.build_api.outcome }}" = "success" ] || \
+             [ "${{ steps.build_webui.outcome }}" = "success" ]; then
+            echo "any-built=true" >> $GITHUB_OUTPUT
+          else
+            echo "any-built=false" >> $GITHUB_OUTPUT
+          fi
 
-    - name: Final cleanup
-      if: always()
-      run: |
-        docker system prune -af || true
-        echo "Final disk space:"
-        df -h
+      - name: Save all Docker images as artifacts
+        if: steps.build-results.outputs.any-built == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: /tmp/*-test.tar
+          retention-days: 1
+
+      - name: Final cleanup
+        if: always()
+        run: |
+          docker system prune -af || true
+          echo "Final disk space:"
+          df -h
 
   docker-tests:
     runs-on: ubuntu-latest
     needs: docker-build
+    if: needs.docker-build.outputs.any-built == 'true'
     timeout-minutes: 60
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Free disk space
-      run: |
-        echo "Disk space before cleanup:"
-        df -h
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /opt/hostedtoolcache/CodeQL
-        docker system prune -af --volumes || true
-        docker builder prune -af || true
-        echo "Disk space after cleanup:"
-        df -h
+      - name: Free disk space
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          echo "Disk space after cleanup:"
+          df -h
 
-    - name: Download Docker images
-      uses: actions/download-artifact@v4
-      with:
-        name: docker-images
-        path: /tmp
+      - name: Download Docker images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+          path: /tmp
 
-    - name: Load Docker images (one at a time with cleanup)
-      run: |
-        if [ -f /tmp/crawler-test.tar ] && [ ! -f /tmp/crawler-test.tar.skip ]; then
-          echo "Loading crawler image..."
-          docker load -i /tmp/crawler-test.tar && rm -f /tmp/crawler-test.tar
-          docker images | grep crawler
-        else
-          echo "Skipping crawler (no changes or not built)"
-        fi
-        
-        if [ -f /tmp/processor-test.tar ] && [ ! -f /tmp/processor-test.tar.skip ]; then
-          echo "Loading processor image..."
-          docker load -i /tmp/processor-test.tar && rm -f /tmp/processor-test.tar
-          docker images | grep processor
-        else
-          echo "Skipping processor (no changes or not built)"
-        fi
-        
-        if [ -f /tmp/api-test.tar ] && [ ! -f /tmp/api-test.tar.skip ]; then
-          echo "Loading API image..."
-          docker load -i /tmp/api-test.tar && rm -f /tmp/api-test.tar
-          docker images | grep api
-        else
-          echo "Skipping API (no changes or not built)"
-        fi
-        
-        if [ -f /tmp/webui-test.tar ] && [ ! -f /tmp/webui-test.tar.skip ]; then
-          echo "Loading WebUI image..."
-          docker load -i /tmp/webui-test.tar && rm -f /tmp/webui-test.tar
-          docker images | grep webui
-        else
-          echo "Skipping WebUI (no changes or not built)"
-        fi
-        
-        echo "All images loaded:"
-        docker images
+      - name: Load Docker images (one at a time with cleanup)
+        run: |
+          if [ -f /tmp/crawler-test.tar ]; then
+            echo "Loading crawler image..."
+            docker load -i /tmp/crawler-test.tar && rm -f /tmp/crawler-test.tar
+            docker images | grep crawler
+          else
+            echo "Skipping crawler (no changes or not built)"
+          fi
+
+          if [ -f /tmp/processor-test.tar ]; then
+            echo "Loading processor image..."
+            docker load -i /tmp/processor-test.tar && rm -f /tmp/processor-test.tar
+            docker images | grep processor
+          else
+            echo "Skipping processor (no changes or not built)"
+          fi
+
+          if [ -f /tmp/api-test.tar ]; then
+            echo "Loading API image..."
+            docker load -i /tmp/api-test.tar && rm -f /tmp/api-test.tar
+            docker images | grep api
+          else
+            echo "Skipping API (no changes or not built)"
+          fi
+
+          if [ -f /tmp/webui-test.tar ]; then
+            echo "Loading WebUI image..."
+            docker load -i /tmp/webui-test.tar && rm -f /tmp/webui-test.tar
+            docker images | grep webui
+          else
+            echo "Skipping WebUI (no changes or not built)"
+          fi
+
+          echo "All images loaded:"
+          docker images
 
   quick-training-test:
     runs-on: ubuntu-latest
     needs: docker-build
+    if: needs.docker-build.outputs.processor-built == 'true'
     timeout-minutes: 60
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Free disk space
-      run: |
-        echo "Disk space before cleanup:"
-        df -h
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /opt/hostedtoolcache/CodeQL
-        docker system prune -af --volumes || true
-        docker builder prune -af || true
-        echo "Disk space after cleanup:"
-        df -h
+      - name: Free disk space
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          echo "Disk space after cleanup:"
+          df -h
 
-    - name: Download Docker images
-      uses: actions/download-artifact@v4
-      with:
-        name: docker-images
-        path: /tmp
+      - name: Download Docker images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+          path: /tmp
 
-    - name: Load processor image
-      run: |
-        docker load -i /tmp/processor-test.tar
-        rm -f /tmp/processor-test.tar
-        docker images | grep processor
+      - name: Load processor image
+        run: |
+          docker load -i /tmp/processor-test.tar
+          rm -f /tmp/processor-test.tar
+          docker images | grep processor
 
-    - name: Create test dataset directory
-      run: |
-        mkdir -p dataset/shards/train dataset/shards/val models
-        chmod -R 777 models dataset
+      - name: Create test dataset directory
+        run: |
+          mkdir -p dataset/shards/train dataset/shards/val models
+          chmod -R 777 models dataset
 
-    - name: Set up Python for dataset creation
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python for dataset creation
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-    - name: Install Python dependencies for dataset creation
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyarrow pandas numpy
+      - name: Install Python dependencies for dataset creation
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyarrow pandas numpy
 
-    - name: Create minimal test dataset
-      run: |
-        # Create a small parquet file with test data for training
-        cat > create_test_dataset.py << 'EOF'
-        import pyarrow as pa
-        import pandas as pd
-        import numpy as np
+      - name: Create minimal test dataset
+        run: |
+          # Create a small parquet file with test data for training
+          cat > create_test_dataset.py << 'EOF'
+          import pyarrow as pa
+          import pandas as pd
+          import numpy as np
 
-        # Create minimal test data (just a few samples)
-        data = {
-            'doc_id': ['test_1', 'test_2'],
-            'tokens': [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
-            'attention_mask': [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1]],
-            'language': ['en', 'en'],
-            'quality_score': [0.8, 0.9],
-            'token_count': [5, 5]
-        }
+          # Create minimal test data (just a few samples)
+          data = {
+              'doc_id': ['test_1', 'test_2'],
+              'tokens': [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
+              'attention_mask': [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1]],
+              'language': ['en', 'en'],
+              'quality_score': [0.8, 0.9],
+              'token_count': [5, 5]
+          }
 
-        df = pd.DataFrame(data)
-        table = pa.Table.from_pandas(df)
+          df = pd.DataFrame(data)
+          table = pa.Table.from_pandas(df)
 
-        # Save as parquet
-        table.to_pandas().to_parquet('dataset/shards/train/test_shard.parquet')
-        table.to_pandas().to_parquet('dataset/shards/val/test_shard.parquet')
+          # Save as parquet
+          table.to_pandas().to_parquet('dataset/shards/train/test_shard.parquet')
+          table.to_pandas().to_parquet('dataset/shards/val/test_shard.parquet')
 
-        print('Test dataset created')
-        EOF
+          print('Test dataset created')
+          EOF
 
-        python3 create_test_dataset.py
+          python3 create_test_dataset.py
 
-    - name: Test model training with minimal data
-      run: |
-        # Create test script
-        cat > test_training.py << 'EOF'
-        import sys
-        sys.path.insert(0, '/app')
-        from trainer.model_trainer import train_model
+      - name: Test model training with minimal data
+        run: |
+          # Create test script
+          cat > test_training.py << 'EOF'
+          import sys
+          sys.path.insert(0, '/app')
+          from trainer.model_trainer import train_model
 
-        # Quick test with very small model and data
-        try:
-            train_model(
-                model_name='distilgpt2',
-                train_dir='dataset/shards/train',
-                val_dir='dataset/shards/val',
-                output_dir='models/test_model',
-                epochs=1,
-                batch_size=1,
-                learning_rate=1e-4,
-                max_length=10,
-                save_steps=1,
-                eval_steps=1,
-                logging_steps=1
-            )
-            print('Training test passed!')
-        except Exception as e:
-            print(f'Training test failed: {e}')
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-        EOF
+          # Quick test with very small model and data
+          try:
+              train_model(
+                  model_name='distilgpt2',
+                  train_dir='dataset/shards/train',
+                  val_dir='dataset/shards/val',
+                  output_dir='models/test_model',
+                  epochs=1,
+                  batch_size=1,
+                  learning_rate=1e-4,
+                  max_length=10,
+                  save_steps=1,
+                  eval_steps=1,
+                  logging_steps=1
+              )
+              print('Training test passed!')
+          except Exception as e:
+              print(f'Training test failed: {e}')
+              import traceback
+              traceback.print_exc()
+              sys.exit(1)
+          EOF
 
-        docker run --rm \
-          -v $(pwd)/dataset:/app/dataset \
-          -v $(pwd)/models:/app/models \
-          -v $(pwd)/test_training.py:/app/test_training.py \
-          --user root \
-          processor:test \
-          sh -c "mkdir -p /app/models/test_model && chown -R processor:processor /app/models /app/dataset && su -s /bin/bash processor -c 'python3 /app/test_training.py'"
+          docker run --rm \
+            -v $(pwd)/dataset:/app/dataset \
+            -v $(pwd)/models:/app/models \
+            -v $(pwd)/test_training.py:/app/test_training.py \
+            --user root \
+            processor:test \
+            sh -c "mkdir -p /app/models/test_model && chown -R processor:processor /app/models /app/dataset && su -s /bin/bash processor -c 'python3 /app/test_training.py'"
 
-    - name: Test model inference
-      run: |
-        docker run --rm \
-          -v $(pwd)/models:/app/models \
-          -v $(pwd)/test_model.py:/app/test_model.py \
-          --user root \
-          processor:test \
-          sh -c "chown -R processor:processor /app/models && su -s /bin/bash processor -c 'python3 /app/test_model.py models/test_model --prompt \"Hello\" --max_length 20'"
-      continue-on-error: true  # Inference test may fail if training didn't complete
+      - name: Test model inference
+        run: |
+          docker run --rm \
+            -v $(pwd)/models:/app/models \
+            -v $(pwd)/test_model.py:/app/test_model.py \
+            --user root \
+            processor:test \
+            sh -c "chown -R processor:processor /app/models && su -s /bin/bash processor -c 'python3 /app/test_model.py models/test_model --prompt \"Hello\" --max_length 20'"
+        continue-on-error: true # Inference test may fail if training didn't complete
 
   push-to-registry:
     runs-on: ubuntu-latest
     needs: [test, docker-build, docker-tests, quick-training-test]
     # Push to registry on successful builds to main/develop, or on workflow_dispatch
     if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
-      github.event_name == 'workflow_dispatch'
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
+        github.event_name == 'workflow_dispatch'
+      ) &&
+      needs.docker-build.outputs.any-built == 'true'
     permissions:
       contents: read
       packages: write
@@ -491,140 +502,140 @@ jobs:
       IMAGE_NAME_LOWER: ${{ github.repository_owner }}/${{ github.event.repository.name }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      with:
-        driver-opts: |
-          image=moby/buildkit:latest
-          network=host
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
 
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Extract version
-      id: meta
-      run: |
-        VERSION=${GITHUB_SHA::8}
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "tag=$VERSION" >> $GITHUB_OUTPUT
+      - name: Extract version
+        id: meta
+        run: |
+          VERSION=${GITHUB_SHA::8}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
 
-    - name: Free disk space
-      run: |
-        echo "Disk space before cleanup:"
-        df -h
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /opt/hostedtoolcache/CodeQL
-        docker system prune -af --volumes || true
-        docker builder prune -af || true
-        echo "Disk space after cleanup:"
-        df -h
+      - name: Free disk space
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          docker system prune -af --volumes || true
+          docker builder prune -af || true
+          echo "Disk space after cleanup:"
+          df -h
 
-    - name: Download Docker images
-      uses: actions/download-artifact@v4
-      with:
-        name: docker-images
-        path: /tmp
+      - name: Download Docker images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+          path: /tmp
 
-    - name: Load and tag images for registry
-      id: load-images
-      run: |
-        echo "Loading images one at a time..."
-        
-        # Convert repository name to lowercase for Docker (required by Docker registry)
-        IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-        echo "Using image name: $IMAGE_NAME_LOWER"
-        
-        if [ -f /tmp/crawler-test.tar ] && [ ! -f /tmp/crawler-test.tar.skip ]; then
-          docker load -i /tmp/crawler-test.tar && rm -f /tmp/crawler-test.tar
-          docker tag crawler:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:${{ steps.meta.outputs.version }}
-          docker tag crawler:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:latest
-          echo "crawler-built=true" >> $GITHUB_OUTPUT
-        else
-          echo "Skipping crawler (not built in this run)"
-          echo "crawler-built=false" >> $GITHUB_OUTPUT
-        fi
-        
-        if [ -f /tmp/processor-test.tar ] && [ ! -f /tmp/processor-test.tar.skip ]; then
-          docker load -i /tmp/processor-test.tar && rm -f /tmp/processor-test.tar
-          docker tag processor:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:${{ steps.meta.outputs.version }}
-          docker tag processor:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:latest
-          echo "processor-built=true" >> $GITHUB_OUTPUT
-        else
-          echo "Skipping processor (not built in this run)"
-          echo "processor-built=false" >> $GITHUB_OUTPUT
-        fi
-        
-        if [ -f /tmp/api-test.tar ] && [ ! -f /tmp/api-test.tar.skip ]; then
-          docker load -i /tmp/api-test.tar && rm -f /tmp/api-test.tar
-          docker tag api:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:${{ steps.meta.outputs.version }}
-          docker tag api:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:latest
-          echo "api-built=true" >> $GITHUB_OUTPUT
-        else
-          echo "Skipping API (not built in this run)"
-          echo "api-built=false" >> $GITHUB_OUTPUT
-        fi
-        
-        if [ -f /tmp/webui-test.tar ] && [ ! -f /tmp/webui-test.tar.skip ]; then
-          docker load -i /tmp/webui-test.tar && rm -f /tmp/webui-test.tar
-          docker tag webui:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:${{ steps.meta.outputs.version }}
-          docker tag webui:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:latest
-          echo "webui-built=true" >> $GITHUB_OUTPUT
-        else
-          echo "Skipping WebUI (not built in this run)"
-          echo "webui-built=false" >> $GITHUB_OUTPUT
-        fi
+      - name: Load and tag images for registry
+        id: load-images
+        run: |
+          echo "Loading images one at a time..."
 
-    - name: Push images to registry
-      run: |
-        # Convert repository name to lowercase for Docker (required by Docker registry)
-        IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-        
-        if [ "${{ steps.load-images.outputs.crawler-built }}" == "true" ]; then
-          echo "Pushing crawler images..."
-          docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:${{ steps.meta.outputs.version }}
-          docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:latest
-        fi
-        
-        if [ "${{ steps.load-images.outputs.processor-built }}" == "true" ]; then
-          echo "Pushing processor images..."
-          docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:${{ steps.meta.outputs.version }}
-          docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:latest
-        fi
-        
-        if [ "${{ steps.load-images.outputs.api-built }}" == "true" ]; then
-          echo "Pushing API images..."
-          docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:${{ steps.meta.outputs.version }}
-          docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:latest
-        fi
-        
-        if [ "${{ steps.load-images.outputs.webui-built }}" == "true" ]; then
-          echo "Pushing WebUI images..."
-          docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:${{ steps.meta.outputs.version }}
-          docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:latest
-        fi
+          # Convert repository name to lowercase for Docker (required by Docker registry)
+          IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "Using image name: $IMAGE_NAME_LOWER"
 
-    - name: Summary
-      run: |
-        IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-        echo "✅ All images pushed to GitHub Container Registry"
-        echo ""
-        echo "📦 Image locations:"
-        echo "  - Crawler:   ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:${{ steps.meta.outputs.version }}"
-        echo "  - Processor: ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:${{ steps.meta.outputs.version }}"
-        echo "  - API:       ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:${{ steps.meta.outputs.version }}"
-        echo "  - WebUI:     ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:${{ steps.meta.outputs.version }}"
-        echo ""
-        echo "🔗 View packages: https://github.com/${{ github.repository }}/pkgs/container"
-        echo "📝 Version: ${{ steps.meta.outputs.version }}"
-        echo ""
-        echo "💡 To pull images:"
-        echo "   docker pull ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:latest"
+          if [ -f /tmp/crawler-test.tar ]; then
+            docker load -i /tmp/crawler-test.tar && rm -f /tmp/crawler-test.tar
+            docker tag crawler:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:${{ steps.meta.outputs.version }}
+            docker tag crawler:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:latest
+            echo "crawler-built=true" >> $GITHUB_OUTPUT
+          else
+            echo "Skipping crawler (not built in this run)"
+            echo "crawler-built=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ -f /tmp/processor-test.tar ]; then
+            docker load -i /tmp/processor-test.tar && rm -f /tmp/processor-test.tar
+            docker tag processor:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:${{ steps.meta.outputs.version }}
+            docker tag processor:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:latest
+            echo "processor-built=true" >> $GITHUB_OUTPUT
+          else
+            echo "Skipping processor (not built in this run)"
+            echo "processor-built=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ -f /tmp/api-test.tar ]; then
+            docker load -i /tmp/api-test.tar && rm -f /tmp/api-test.tar
+            docker tag api:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:${{ steps.meta.outputs.version }}
+            docker tag api:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:latest
+            echo "api-built=true" >> $GITHUB_OUTPUT
+          else
+            echo "Skipping API (not built in this run)"
+            echo "api-built=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [ -f /tmp/webui-test.tar ]; then
+            docker load -i /tmp/webui-test.tar && rm -f /tmp/webui-test.tar
+            docker tag webui:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:${{ steps.meta.outputs.version }}
+            docker tag webui:test ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:latest
+            echo "webui-built=true" >> $GITHUB_OUTPUT
+          else
+            echo "Skipping WebUI (not built in this run)"
+            echo "webui-built=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push images to registry
+        run: |
+          # Convert repository name to lowercase for Docker (required by Docker registry)
+          IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+
+          if [ "${{ steps.load-images.outputs.crawler-built }}" == "true" ]; then
+            echo "Pushing crawler images..."
+            docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:${{ steps.meta.outputs.version }}
+            docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:latest
+          fi
+
+          if [ "${{ steps.load-images.outputs.processor-built }}" == "true" ]; then
+            echo "Pushing processor images..."
+            docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:${{ steps.meta.outputs.version }}
+            docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:latest
+          fi
+
+          if [ "${{ steps.load-images.outputs.api-built }}" == "true" ]; then
+            echo "Pushing API images..."
+            docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:${{ steps.meta.outputs.version }}
+            docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:latest
+          fi
+
+          if [ "${{ steps.load-images.outputs.webui-built }}" == "true" ]; then
+            echo "Pushing WebUI images..."
+            docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:${{ steps.meta.outputs.version }}
+            docker push ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:latest
+          fi
+
+      - name: Summary
+        run: |
+          IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "✅ All images pushed to GitHub Container Registry"
+          echo ""
+          echo "📦 Image locations:"
+          echo "  - Crawler:   ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:${{ steps.meta.outputs.version }}"
+          echo "  - Processor: ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/processor:${{ steps.meta.outputs.version }}"
+          echo "  - API:       ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/api:${{ steps.meta.outputs.version }}"
+          echo "  - WebUI:     ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/webui:${{ steps.meta.outputs.version }}"
+          echo ""
+          echo "🔗 View packages: https://github.com/${{ github.repository }}/pkgs/container"
+          echo "📝 Version: ${{ steps.meta.outputs.version }}"
+          echo ""
+          echo "💡 To pull images:"
+          echo "   docker pull ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:latest"

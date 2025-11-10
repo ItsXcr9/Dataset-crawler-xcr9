@@ -10,6 +10,10 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+      IMAGE_NAME_LOWER: ${{ toLower(github.repository) }}
 
     services:
       postgres:
@@ -41,35 +45,96 @@ jobs:
           image=moby/buildkit:latest
           network=host
 
-    - name: Build crawler image
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Pull prebuilt crawler image
+      id: pull_crawler
+      continue-on-error: true
+      run: |
+        IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}/crawler:latest"
+        echo "Attempting to pull $IMAGE..."
+        docker pull "$IMAGE"
+        docker tag "$IMAGE" crawler:integration
+
+    - name: Build crawler image (fallback)
+      if: steps.pull_crawler.outcome != 'success'
+      id: build_crawler
       uses: docker/build-push-action@v5
       with:
         context: .
         file: ./docker/Dockerfile.crawler
         push: false
         tags: crawler:integration
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        outputs: type=docker,dest=/tmp/crawler-integration.tar
+        cache-from: type=gha,scope=crawler
+        cache-to: type=gha,mode=max,scope=crawler-integration
 
-    - name: Build processor image
+    - name: Load crawler image
+      if: steps.pull_crawler.outcome != 'success'
+      run: |
+        docker load -i /tmp/crawler-integration.tar
+        rm -f /tmp/crawler-integration.tar
+
+    - name: Pull prebuilt processor image
+      id: pull_processor
+      continue-on-error: true
+      run: |
+        IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}/processor:latest"
+        echo "Attempting to pull $IMAGE..."
+        docker pull "$IMAGE"
+        docker tag "$IMAGE" processor:integration
+
+    - name: Build processor image (fallback)
+      if: steps.pull_processor.outcome != 'success'
+      id: build_processor
       uses: docker/build-push-action@v5
       with:
         context: .
         file: ./docker/Dockerfile.processor
         push: false
         tags: processor:integration
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        outputs: type=docker,dest=/tmp/processor-integration.tar
+        cache-from: type=gha,scope=processor
+        cache-to: type=gha,mode=max,scope=processor-integration
 
-    - name: Build API image
+    - name: Load processor image
+      if: steps.pull_processor.outcome != 'success'
+      run: |
+        docker load -i /tmp/processor-integration.tar
+        rm -f /tmp/processor-integration.tar
+
+    - name: Pull prebuilt API image
+      id: pull_api
+      continue-on-error: true
+      run: |
+        IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}/api:latest"
+        echo "Attempting to pull $IMAGE..."
+        docker pull "$IMAGE"
+        docker tag "$IMAGE" api:integration
+
+    - name: Build API image (fallback)
+      if: steps.pull_api.outcome != 'success'
+      id: build_api
       uses: docker/build-push-action@v5
       with:
         context: .
         file: ./docker/Dockerfile.api
         push: false
         tags: api:integration
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        outputs: type=docker,dest=/tmp/api-integration.tar
+        cache-from: type=gha,scope=api
+        cache-to: type=gha,mode=max,scope=api-integration
+
+    - name: Load API image
+      if: steps.pull_api.outcome != 'success'
+      run: |
+        docker load -i /tmp/api-integration.tar
+        rm -f /tmp/api-integration.tar
 
     - name: Create test network
       run: docker network create test-network
