@@ -14,7 +14,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, xcr9]
     timeout-minutes: 30
     strategy:
       matrix:
@@ -88,7 +88,7 @@ jobs:
       - name: Run unit tests
         run: |
           pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing || echo "⚠️ Some tests failed"
-        continue-on-error: true # Don't fail CI if tests fail initially
+        continue-on-error: true
 
       - name: Run crawler tests
         run: |
@@ -120,7 +120,7 @@ jobs:
         continue-on-error: true
 
   docker-build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, xcr9]
     needs: test
     timeout-minutes: 90
     outputs:
@@ -290,7 +290,7 @@ jobs:
           df -h
 
   docker-tests:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, xcr9]
     needs: docker-build
     if: needs.docker-build.outputs.any-built == 'true'
     timeout-minutes: 60
@@ -358,7 +358,7 @@ jobs:
           docker images
 
   quick-training-test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, xcr9]
     needs: docker-build
     if: needs.docker-build.outputs.processor-built == 'true'
     timeout-minutes: 60
@@ -411,13 +411,11 @@ jobs:
 
       - name: Create minimal test dataset
         run: |
-          # Create a small parquet file with test data for training
           cat > create_test_dataset.py << 'EOF'
           import pyarrow as pa
           import pandas as pd
           import numpy as np
 
-          # Create minimal test data (just a few samples)
           data = {
               'doc_id': ['test_1', 'test_2'],
               'tokens': [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]],
@@ -430,7 +428,6 @@ jobs:
           df = pd.DataFrame(data)
           table = pa.Table.from_pandas(df)
 
-          # Save as parquet
           table.to_pandas().to_parquet('dataset/shards/train/test_shard.parquet')
           table.to_pandas().to_parquet('dataset/shards/val/test_shard.parquet')
 
@@ -441,13 +438,11 @@ jobs:
 
       - name: Test model training with minimal data
         run: |
-          # Create test script
           cat > test_training.py << 'EOF'
           import sys
           sys.path.insert(0, '/app')
           from trainer.model_trainer import train_model
 
-          # Quick test with very small model and data
           try:
               train_model(
                   model_name='distilgpt2',
@@ -486,12 +481,11 @@ jobs:
             --user root \
             processor:test \
             sh -c "chown -R processor:processor /app/models && su -s /bin/bash processor -c 'python3 /app/test_model.py models/test_model --prompt \"Hello\" --max_length 20'"
-        continue-on-error: true # Inference test may fail if training didn't complete
+        continue-on-error: true
 
   push-to-registry:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, xcr9]
     needs: [test, docker-build, docker-tests, quick-training-test]
-    # Push to registry on successful builds to main/develop, or on workflow_dispatch
     if: |
       (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
@@ -504,8 +498,7 @@ jobs:
 
     env:
       REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository_owner }}/${{ github.event.repository.name }}
-      IMAGE_NAME_LOWER: ${{ github.repository_owner }}/${{ github.event.repository.name }}
+      IMAGE_NAME: ${{ github.repository }}
 
     steps:
       - name: Checkout code
@@ -556,8 +549,7 @@ jobs:
         run: |
           echo "Loading images one at a time..."
 
-          # Convert repository name to lowercase for Docker (required by Docker registry)
-          IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_NAME_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
           echo "Using image name: $IMAGE_NAME_LOWER"
 
           if [ -f /tmp/crawler-test.tar ]; then
@@ -602,8 +594,7 @@ jobs:
 
       - name: Push images to registry
         run: |
-          # Convert repository name to lowercase for Docker (required by Docker registry)
-          IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_NAME_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
 
           if [ "${{ steps.load-images.outputs.crawler-built }}" == "true" ]; then
             echo "Pushing crawler images..."
@@ -631,7 +622,7 @@ jobs:
 
       - name: Summary
         run: |
-          IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_NAME_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
           echo "✅ All images pushed to GitHub Container Registry"
           echo ""
           echo "📦 Image locations:"
@@ -644,4 +635,4 @@ jobs:
           echo "📝 Version: ${{ steps.meta.outputs.version }}"
           echo ""
           echo "💡 To pull images:"
-          echo "   docker pull ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:latest"
+          echo "   docker pull ${{ env.REGISTRY }}/$IMAGE_NAME_LOWER/crawler:latest"}

@@ -9,7 +9,7 @@ on:
 
 jobs:
   validate-workflows:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, xcr9]
     name: Validate Workflow Files
 
     steps:
